@@ -1,7 +1,7 @@
 import { expandOccurrences, isTrashExpired } from '@today-todo/domain';
 
-import { ApiService } from './api-service.js';
-import { MemoryDatabase } from './memory-database.js';
+import type { ApiService } from './api-service.js';
+import type { MemoryDatabase } from './memory-database.js';
 import type { SentMessage } from './types.js';
 
 export interface SchedulerOptions {
@@ -24,7 +24,7 @@ export class Schedulers {
     this.sendMessage = options.sendMessage;
   }
 
-  public async materializeAndClean(throughDate: string): Promise<void> {
+  public materializeAndClean(throughDate: string): void {
     const now = this.now();
     for (const series of this.database.seriesForUser()) {
       if (series.status !== 'ACTIVE' || series.startDate > throughDate) {
@@ -47,12 +47,9 @@ export class Schedulers {
     for (const user of this.database.usersPendingPurge(now)) {
       this.database.purgeUser(user.id);
     }
-    for (const series of this.database.seriesForUser()) {
-      const trashed = this.database.tasksForUser(series.userId, 'TRASHED');
-      for (const task of trashed) {
-        if (isTrashExpired(task, now)) {
-          this.database.deleteTask(series.userId, task.id);
-        }
+    for (const task of this.database.allTasks()) {
+      if (task.status === 'TRASHED' && isTrashExpired(task, now)) {
+        this.database.deleteTask(task.userId, task.id);
       }
     }
   }

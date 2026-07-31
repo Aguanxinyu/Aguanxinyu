@@ -1,4 +1,4 @@
-import type { ApiResponse, RecurrenceRule, Task } from '@today-todo/contracts';
+import type { RecurrenceRule, Task } from '@today-todo/contracts';
 import {
   completeTask,
   createReminderForTask,
@@ -14,7 +14,7 @@ import {
 } from '@today-todo/domain';
 import { z, ZodError } from 'zod';
 
-import { MemoryDatabase } from './memory-database.js';
+import type { MemoryDatabase } from './memory-database.js';
 import type {
   ApiData,
   AuthData,
@@ -169,7 +169,7 @@ export class ApiService {
         }
       }
 
-      const result = await this.routeAuthenticated(user, request);
+      const result = this.routeAuthenticated(user, request);
       if (request.method !== 'GET' && request.requestId !== undefined) {
         this.database.saveIdempotentResult(user.id, request.requestId, result);
       }
@@ -231,10 +231,7 @@ export class ApiService {
     return user?.status === 'ACTIVE' ? user : undefined;
   }
 
-  private async routeAuthenticated(
-    user: UserRecord,
-    request: HttpRequest
-  ): Promise<HttpResult<ApiData>> {
+  private routeAuthenticated(user: UserRecord, request: HttpRequest): HttpResult<ApiData> {
     if (request.method === 'GET' && request.path === '/v1/tasks') {
       const tasks = this.database
         .tasksForUser(user.id)

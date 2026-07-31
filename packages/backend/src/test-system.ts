@@ -71,6 +71,7 @@ type ResponseData<R extends HttpRequest> = R extends {
 
 export interface TestSystemOptions {
   readonly now: number;
+  readonly sendShouldFail?: boolean;
 }
 
 export interface LoginResult {
@@ -81,27 +82,37 @@ export interface LoginResult {
 export class TestSystem {
   private readonly api: ApiService;
   private readonly schedulers: Schedulers;
+  private currentTime: number;
   private messages: readonly SentMessage[] = [];
 
   public constructor(options: TestSystemOptions) {
+    this.currentTime = options.now;
     const database = new MemoryDatabase();
     this.api = new ApiService({
       database,
-      now: () => options.now,
-      exchangeLoginCode: async (code) => `openid:${code}`
+      now: () => this.currentTime,
+      exchangeLoginCode: (code) => Promise.resolve(`openid:${code}`)
     });
     this.schedulers = new Schedulers({
       database,
       api: this.api,
-      now: () => options.now,
-      sendMessage: async (message) => {
+      now: () => this.currentTime,
+      sendMessage: (message) => {
+        if (options.sendShouldFail === true) {
+          return Promise.reject(new Error('TEST_SEND_FAILURE'));
+        }
         this.messages = [...this.messages, message];
+        return Promise.resolve();
       }
     });
   }
 
   public get sentMessages(): readonly SentMessage[] {
     return this.messages;
+  }
+
+  public setNow(now: number): void {
+    this.currentTime = now;
   }
 
   public request<const R extends HttpRequest>(request: R): Promise<HttpResult<ResponseData<R>>> {
@@ -121,7 +132,8 @@ export class TestSystem {
   }
 
   public runMaintenance(throughDate: string): Promise<void> {
-    return this.schedulers.materializeAndClean(throughDate);
+    this.schedulers.materializeAndClean(throughDate);
+    return Promise.resolve();
   }
 
   public runReminderTicker(at: number): Promise<void> {

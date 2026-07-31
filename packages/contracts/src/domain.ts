@@ -9,14 +9,14 @@ export type ReminderState =
 export type Location =
   | {
       readonly name: string;
-      readonly address?: string;
+      readonly address?: string | undefined;
       readonly latitude: number;
       readonly longitude: number;
       readonly source: 'MAP';
     }
   | {
       readonly name: string;
-      readonly address?: string;
+      readonly address?: string | undefined;
       readonly source: 'MANUAL';
     };
 

@@ -108,6 +108,10 @@ export class MemoryDatabase {
     );
   }
 
+  public allTasks(): readonly Task[] {
+    return this.snapshot.tasks;
+  }
+
   public findTask(userId: string, taskId: string): Task | undefined {
     return this.snapshot.tasks.find((task) => task.userId === userId && task.id === taskId);
   }

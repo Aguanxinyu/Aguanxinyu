@@ -24,7 +24,7 @@ describe('authenticated todo API flow', () => {
         dueHasTime: false,
         tagIds: []
       }
-    };
+    } as const;
     const created = await system.request(createRequest);
     const duplicated = await system.request(createRequest);
 
