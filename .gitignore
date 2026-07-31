@@ -1,0 +1,15 @@
+node_modules/
+dist/
+coverage/
+miniprogram_npm/
+
+.env
+.env.*
+!.env.example
+
+*.key
+*.pem
+*.p12
+
+.DS_Store
+project.private.config.json
