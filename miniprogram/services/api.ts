@@ -99,7 +99,10 @@ function requestId(): Promise<string> {
     wx.getRandomValues({
       length: 16,
       success: ({ randomValues }) => {
-        resolve(wx.arrayBufferToBase64(randomValues).replace(/[+/=]/g, ''));
+        const identifier = Array.from(new Uint8Array(randomValues), (value) =>
+          value.toString(16).padStart(2, '0')
+        ).join('');
+        resolve(identifier);
       },
       fail: () => {
         reject(new ApiClientError('RANDOM_ID_FAILED', '无法安全生成请求标识'));
