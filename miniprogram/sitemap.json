@@ -1,0 +1,9 @@
+{
+  "desc": "今日待办页面索引",
+  "rules": [
+    {
+      "action": "disallow",
+      "page": "*"
+    }
+  ]
+}

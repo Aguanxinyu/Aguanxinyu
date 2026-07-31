@@ -1,0 +1,39 @@
+{
+  "pages": [
+    "pages/todos/index",
+    "pages/lists/index",
+    "pages/profile/index",
+    "pages/task-edit/index",
+    "pages/trash/index"
+  ],
+  "window": {
+    "navigationBarTitleText": "今日待办",
+    "navigationBarBackgroundColor": "#F6F7FB",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#F6F7FB",
+    "backgroundTextStyle": "dark"
+  },
+  "tabBar": {
+    "color": "#94A3B8",
+    "selectedColor": "#2563EB",
+    "backgroundColor": "#FFFFFF",
+    "borderStyle": "white",
+    "list": [
+      {
+        "pagePath": "pages/todos/index",
+        "text": "待办"
+      },
+      {
+        "pagePath": "pages/lists/index",
+        "text": "清单"
+      },
+      {
+        "pagePath": "pages/profile/index",
+        "text": "我的"
+      }
+    ]
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json",
+  "lazyCodeLoading": "requiredComponents"
+}

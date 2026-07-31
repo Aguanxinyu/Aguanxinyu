@@ -1,0 +1,65 @@
+.profile-card {
+  display: flex;
+  align-items: center;
+  gap: 22rpx;
+  margin-top: 40rpx;
+  padding: 30rpx;
+}
+
+.profile-mark {
+  width: 86rpx;
+  height: 86rpx;
+  border-radius: 28rpx;
+  background: #2563eb;
+  color: #ffffff;
+  font-size: 38rpx;
+  font-weight: 700;
+  line-height: 86rpx;
+  text-align: center;
+}
+
+.profile-name {
+  font-size: 32rpx;
+  font-weight: 600;
+}
+
+.profile-caption {
+  margin-top: 8rpx;
+  color: #94a3b8;
+  font-size: 24rpx;
+}
+
+.menu-card {
+  overflow: hidden;
+}
+
+.menu-row {
+  display: flex;
+  min-height: 98rpx;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 28rpx;
+  border-bottom: 1rpx solid #f1f5f9;
+  font-size: 29rpx;
+}
+
+.menu-row:last-child {
+  border-bottom: 0;
+}
+
+.menu-hint {
+  color: #94a3b8;
+  font-size: 24rpx;
+}
+
+.danger {
+  color: #dc2626;
+}
+
+.privacy-note {
+  padding: 48rpx 20rpx;
+  color: #94a3b8;
+  font-size: 23rpx;
+  line-height: 1.7;
+  text-align: center;
+}

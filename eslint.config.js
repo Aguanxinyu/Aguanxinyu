@@ -14,7 +14,8 @@ export default tseslint.config(
           './tsconfig.test.json',
           './packages/contracts/tsconfig.json',
           './packages/domain/tsconfig.json',
-          './packages/backend/tsconfig.json'
+          './packages/backend/tsconfig.json',
+          './miniprogram/tsconfig.json'
         ],
         tsconfigRootDir: import.meta.dirname
       }

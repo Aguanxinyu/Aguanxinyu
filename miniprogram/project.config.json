@@ -1,0 +1,14 @@
+{
+  "appid": "touristappid",
+  "compileType": "miniprogram",
+  "projectname": "today-todo",
+  "miniprogramRoot": "./",
+  "setting": {
+    "useCompilerPlugins": ["typescript"],
+    "es6": true,
+    "enhance": true,
+    "postcss": true,
+    "minified": true,
+    "urlCheck": true
+  }
+}

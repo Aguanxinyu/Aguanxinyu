@@ -5,7 +5,11 @@ export default defineConfig({
     include: ['packages/**/test/**/*.test.ts', 'tests/**/*.test.ts'],
     coverage: {
       provider: 'v8',
-      include: ['packages/*/src/**/*.ts', 'functions/*/src/**/*.ts'],
+      include: [
+        'packages/*/src/**/*.ts',
+        'functions/*/src/**/*.ts',
+        'miniprogram/stores/todo-store.ts'
+      ],
       exclude: ['**/index.ts', '**/*.d.ts'],
       reporter: ['text', 'lcov'],
       thresholds: {

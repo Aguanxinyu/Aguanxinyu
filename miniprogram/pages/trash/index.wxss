@@ -1,0 +1,41 @@
+.trash-card {
+  overflow: hidden;
+}
+
+.trash-row {
+  display: flex;
+  min-height: 108rpx;
+  align-items: center;
+  padding: 20rpx 24rpx;
+  border-bottom: 1rpx solid #f1f5f9;
+}
+
+.trash-row:last-child {
+  border-bottom: 0;
+}
+
+.trash-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.trash-title {
+  display: block;
+  overflow: hidden;
+  color: #475569;
+  font-size: 29rpx;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trash-meta {
+  display: block;
+  margin-top: 8rpx;
+  color: #94a3b8;
+  font-size: 21rpx;
+}
+
+.restore {
+  width: 108rpx;
+  margin: 0 0 0 16rpx;
+}

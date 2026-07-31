@@ -1,0 +1,149 @@
+.todo-page {
+  padding-bottom: 220rpx;
+}
+
+.hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18rpx 6rpx 10rpx;
+}
+
+.add-button {
+  width: 84rpx;
+  height: 84rpx;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 28rpx;
+  background: #2563eb;
+  box-shadow: 0 14rpx 26rpx rgba(37, 99, 235, 0.24);
+  color: #ffffff;
+  font-size: 52rpx;
+  font-weight: 300;
+  line-height: 80rpx;
+}
+
+.add-button::after,
+.quick-button::after {
+  border: 0;
+}
+
+.offline-tip {
+  margin-top: 26rpx;
+  padding: 20rpx 24rpx;
+  border-radius: 18rpx;
+  background: #fff7ed;
+  color: #c2410c;
+  font-size: 24rpx;
+}
+
+.task-card {
+  overflow: hidden;
+}
+
+.task-row {
+  display: flex;
+  min-height: 112rpx;
+  align-items: center;
+  padding: 20rpx 24rpx;
+  border-bottom: 1rpx solid #f1f5f9;
+}
+
+.task-row:last-child {
+  border-bottom: 0;
+}
+
+.task-row--pressed {
+  background: #f8fafc;
+}
+
+.check {
+  flex: 0 0 auto;
+  width: 42rpx;
+  height: 42rpx;
+  border: 3rpx solid #cbd5e1;
+  border-radius: 50%;
+  color: #ffffff;
+  font-size: 26rpx;
+  line-height: 42rpx;
+  text-align: center;
+}
+
+.task-row--done .check {
+  border-color: #2563eb;
+  background: #2563eb;
+}
+
+.task-content {
+  min-width: 0;
+  margin-left: 22rpx;
+}
+
+.task-title {
+  display: block;
+  overflow: hidden;
+  font-size: 30rpx;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-row--done .task-title {
+  color: #94a3b8;
+  text-decoration: line-through;
+}
+
+.task-meta {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 10rpx;
+  color: #94a3b8;
+  font-size: 22rpx;
+}
+
+.priority {
+  font-weight: 700;
+}
+
+.priority--HIGH {
+  color: #ef4444;
+}
+
+.priority--MEDIUM {
+  color: #f59e0b;
+}
+
+.priority--LOW {
+  color: #22c55e;
+}
+
+.quick-create {
+  position: fixed;
+  right: 28rpx;
+  bottom: 132rpx;
+  left: 28rpx;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  padding: 14rpx 14rpx 14rpx 26rpx;
+}
+
+.quick-create input {
+  flex: 1;
+  height: 68rpx;
+  font-size: 28rpx;
+}
+
+.quick-button {
+  width: 116rpx;
+  height: 68rpx;
+  margin: 0 0 0 12rpx;
+  padding: 0;
+  border: 0;
+  border-radius: 20rpx;
+  background: #2563eb;
+  color: #ffffff;
+  font-size: 26rpx;
+  line-height: 68rpx;
+}

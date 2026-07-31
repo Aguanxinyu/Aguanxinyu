@@ -9,7 +9,7 @@
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
-    "typecheck": "tsc --build --pretty false && tsc --project tsconfig.test.json --pretty false",
+    "typecheck": "tsc --build --pretty false && tsc --project tsconfig.test.json --pretty false && tsc --project miniprogram/tsconfig.json --pretty false",
     "lint": "eslint .",
     "format:check": "prettier --check .",
     "format": "prettier --write .",

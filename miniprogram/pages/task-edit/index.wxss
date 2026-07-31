@@ -1,0 +1,70 @@
+.edit-page {
+  padding-top: 42rpx;
+}
+
+.form-card {
+  margin-top: 38rpx;
+  padding: 0 28rpx;
+}
+
+.field {
+  padding: 28rpx 0;
+  border-bottom: 1rpx solid #f1f5f9;
+}
+
+.field:last-child {
+  border-bottom: 0;
+}
+
+.field--row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.label {
+  display: block;
+  margin-bottom: 16rpx;
+  color: #475569;
+  font-size: 26rpx;
+  font-weight: 600;
+}
+
+.field--row .label {
+  margin-bottom: 0;
+}
+
+.field input,
+.field textarea {
+  width: 100%;
+  color: #0f172a;
+  font-size: 30rpx;
+}
+
+.field textarea {
+  min-height: 92rpx;
+}
+
+.picker-value {
+  color: #2563eb;
+  font-size: 28rpx;
+}
+
+.inline-fields {
+  display: flex;
+  gap: 18rpx;
+  padding: 22rpx 0;
+  border-bottom: 1rpx solid #f1f5f9;
+}
+
+.date-chip {
+  padding: 14rpx 22rpx;
+  border-radius: 16rpx;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 26rpx;
+}
+
+.save-button {
+  margin-top: 40rpx;
+}

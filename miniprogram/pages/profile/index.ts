@@ -1,0 +1,56 @@
+import { ApiClientError, apiClient } from '../../services/api.js';
+import { todoController } from '../../stores/todo-controller.js';
+
+function messageFor(error: unknown): string {
+  return error instanceof ApiClientError ? error.message : '操作失败，请稍后重试';
+}
+
+Page({
+  data: {
+    syncing: false
+  },
+
+  onOpenTrash() {
+    void wx.navigateTo({ url: '/pages/trash/index' });
+  },
+
+  async onSync() {
+    this.setData({ syncing: true });
+    try {
+      await todoController.refresh();
+      wx.showToast({ title: '同步完成', icon: 'success' });
+    } catch (error) {
+      wx.showToast({ title: messageFor(error), icon: 'none' });
+    } finally {
+      this.setData({ syncing: false });
+    }
+  },
+
+  onDeleteAccount() {
+    wx.showModal({
+      title: '申请注销账号',
+      content: '所有会话会立即退出，数据将在 7 天后永久删除。该操作提交后不可在小程序内撤销。',
+      confirmText: '确认注销',
+      confirmColor: '#DC2626',
+      success: ({ confirm }) => {
+        if (!confirm) {
+          return;
+        }
+        void apiClient
+          .startAccountDeletion()
+          .then(({ purgeAfterAt }) => {
+            apiClient.clearSession();
+            const date = new Date(purgeAfterAt).toLocaleDateString('zh-CN');
+            wx.showModal({
+              title: '注销申请已提交',
+              content: `账号数据预计在 ${date} 后永久删除。`,
+              showCancel: false
+            });
+          })
+          .catch((error: unknown) => {
+            wx.showToast({ title: messageFor(error), icon: 'none' });
+          });
+      }
+    });
+  }
+});

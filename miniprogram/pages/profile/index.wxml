@@ -1,0 +1,36 @@
+<view class="page">
+  <view class="page-title">我的</view>
+  <view class="page-subtitle">数据与账号设置</view>
+
+  <view class="card profile-card">
+    <view class="profile-mark">今</view>
+    <view>
+      <view class="profile-name">今日待办</view>
+      <view class="profile-caption">微信账号已安全登录</view>
+    </view>
+  </view>
+
+  <view class="section-title">数据</view>
+  <view class="card menu-card">
+    <view class="menu-row" bindtap="onSync">
+      <text>立即同步</text>
+      <text class="menu-hint">{{syncing ? '同步中…' : '›'}}</text>
+    </view>
+    <view class="menu-row" bindtap="onOpenTrash">
+      <text>回收站</text>
+      <text class="menu-hint">保留 30 天 ›</text>
+    </view>
+  </view>
+
+  <view class="section-title">账号</view>
+  <view class="card menu-card">
+    <view class="menu-row danger" bindtap="onDeleteAccount">
+      <text>注销账号</text>
+      <text>›</text>
+    </view>
+  </view>
+
+  <view class="privacy-note">
+    仅保存完成待办所需的数据。微信凭据由服务端加密管理，不存储在小程序本地。
+  </view>
+</view>

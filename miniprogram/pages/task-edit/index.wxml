@@ -1,0 +1,72 @@
+<view class="page edit-page">
+  <view class="page-title">新建待办</view>
+  <view class="page-subtitle">只填标题也可以立即保存</view>
+
+  <view class="card form-card">
+    <view class="field">
+      <text class="label">标题</text>
+      <input
+        value="{{title}}"
+        placeholder="准备做什么？"
+        maxlength="100"
+        focus
+        bindinput="onTitleInput"
+      />
+    </view>
+    <view class="field">
+      <text class="label">备注</text>
+      <textarea
+        value="{{notes}}"
+        placeholder="补充细节（选填）"
+        maxlength="1000"
+        auto-height
+        bindinput="onNotesInput"
+      />
+    </view>
+    <view class="field field--row">
+      <text class="label">优先级</text>
+      <picker value="{{priorityIndex}}" range="{{priorities}}" bindchange="onPriorityChange">
+        <view class="picker-value">{{priorities[priorityIndex]}} ›</view>
+      </picker>
+    </view>
+    <view class="field field--row">
+      <text class="label">设置日期</text>
+      <switch color="#2563EB" checked="{{hasDueDate}}" bindchange="onDueDateSwitch" />
+    </view>
+    <view wx:if="{{hasDueDate}}" class="inline-fields">
+      <picker mode="date" value="{{date}}" bindchange="onDateChange">
+        <view class="date-chip">{{date}}</view>
+      </picker>
+      <picker mode="time" value="{{time}}" bindchange="onTimeChange">
+        <view class="date-chip">{{hasDueTime ? time : '选择时间'}}</view>
+      </picker>
+    </view>
+    <view class="field field--row">
+      <text class="label">微信提醒</text>
+      <switch
+        color="#2563EB"
+        checked="{{reminderEnabled}}"
+        bindchange="onReminderSwitch"
+      />
+    </view>
+    <view class="field field--row">
+      <text class="label">重复</text>
+      <picker value="{{repeatIndex}}" range="{{repeats}}" bindchange="onRepeatChange">
+        <view class="picker-value">{{repeats[repeatIndex]}} ›</view>
+      </picker>
+    </view>
+    <view class="field">
+      <text class="label">地点</text>
+      <input
+        value="{{locationName}}"
+        placeholder="手动输入地点（选填）"
+        maxlength="100"
+        bindinput="onLocationInput"
+      />
+    </view>
+  </view>
+
+  <button class="primary-button save-button" loading="{{saving}}" bindtap="onSave">
+    保存待办
+  </button>
+</view>

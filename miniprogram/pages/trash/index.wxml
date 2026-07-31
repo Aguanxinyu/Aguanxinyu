@@ -1,0 +1,20 @@
+<view class="page">
+  <view class="page-title">回收站</view>
+  <view class="page-subtitle">删除的待办将在 30 天后永久清理</view>
+
+  <view class="section-title">已删除 · {{tasks.length}}</view>
+  <view class="card trash-card">
+    <view wx:for="{{tasks}}" wx:key="id" wx:for-item="task" class="trash-row">
+      <view class="trash-content">
+        <text class="trash-title">{{task.title}}</text>
+        <text class="trash-meta">原清单中的状态会在恢复后保留</text>
+      </view>
+      <button class="ghost-button restore" data-id="{{task.id}}" bindtap="onRestore">
+        恢复
+      </button>
+    </view>
+    <view wx:if="{{!loading && tasks.length === 0}}" class="empty">
+      回收站是空的
+    </view>
+  </view>
+</view>
