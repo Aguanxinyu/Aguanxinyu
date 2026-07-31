@@ -6,6 +6,9 @@
     },
     {
       "path": "./packages/domain"
+    },
+    {
+      "path": "./packages/backend"
     }
   ]
 }

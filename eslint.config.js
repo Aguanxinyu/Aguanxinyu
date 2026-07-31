@@ -13,7 +13,8 @@ export default tseslint.config(
         project: [
           './tsconfig.test.json',
           './packages/contracts/tsconfig.json',
-          './packages/domain/tsconfig.json'
+          './packages/domain/tsconfig.json',
+          './packages/backend/tsconfig.json'
         ],
         tsconfigRootDir: import.meta.dirname
       }
