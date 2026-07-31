@@ -1,5 +1,6 @@
 import { ApiClientError, apiClient, type CreateTaskInput } from '../services/api.js';
 import {
+  acknowledgeMutation,
   createTodoState,
   enqueueMutation,
   replaceTasks,
@@ -13,12 +14,48 @@ const CACHE_KEY = 'today-todo:state';
 
 type Listener = (state: TodoState) => void;
 
-function isTodoState(value: unknown): value is TodoState {
-  if (typeof value !== 'object' || value === null) {
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isClientTask(value: unknown): value is ClientTask {
+  if (!isRecord(value)) {
     return false;
   }
-  const candidate = value as Readonly<Record<string, unknown>>;
-  return Array.isArray(candidate.tasks) && Array.isArray(candidate.pendingMutations);
+  return (
+    typeof value.id === 'string' &&
+    typeof value.title === 'string' &&
+    (value.status === 'TODO' || value.status === 'DONE' || value.status === 'TRASHED') &&
+    (value.priority === 'HIGH' || value.priority === 'MEDIUM' || value.priority === 'LOW') &&
+    typeof value.version === 'number'
+  );
+}
+
+function isPendingMutation(value: unknown): value is PendingMutation {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return (
+    typeof value.id === 'string' &&
+    typeof value.taskId === 'string' &&
+    typeof value.createdAt === 'number' &&
+    (value.action === 'COMPLETE' ||
+      value.action === 'UNCOMPLETE' ||
+      value.action === 'TRASH' ||
+      value.action === 'RESTORE')
+  );
+}
+
+function isTodoState(value: unknown): value is TodoState {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return (
+    Array.isArray(value.tasks) &&
+    value.tasks.every(isClientTask) &&
+    Array.isArray(value.pendingMutations) &&
+    value.pendingMutations.every(isPendingMutation)
+  );
 }
 
 function replaceTask(state: TodoState, task: ClientTask): TodoState {
@@ -56,11 +93,19 @@ export class TodoController {
   }
 
   public async refresh(): Promise<void> {
-    if (apiClient.getStoredToken() === null) {
-      await apiClient.login();
+    try {
+      if (apiClient.getStoredToken() === null) {
+        await apiClient.login();
+      }
+      await this.flushPendingMutations();
+      const tasks = await apiClient.listTasks();
+      this.publish(replaceTasks(this.state, tasks, Date.now()));
+    } catch (error) {
+      if (error instanceof ApiClientError && error.code === 'AUTH_REQUIRED') {
+        this.publish(createTodoState());
+      }
+      throw error;
     }
-    const tasks = await apiClient.listTasks();
-    this.publish(replaceTasks(this.state, tasks, Date.now()));
   }
 
   public async create(input: CreateTaskInput): Promise<ClientTask> {
@@ -125,6 +170,37 @@ export class TodoController {
         createdAt
       })
     );
+  }
+
+  private async flushPendingMutations(): Promise<void> {
+    for (const mutation of [...this.state.pendingMutations]) {
+      try {
+        switch (mutation.action) {
+          case 'COMPLETE':
+            await apiClient.completeTask(mutation.taskId);
+            break;
+          case 'UNCOMPLETE':
+            await apiClient.uncompleteTask(mutation.taskId);
+            break;
+          case 'TRASH':
+            await apiClient.trashTask(mutation.taskId);
+            break;
+          case 'RESTORE':
+            await apiClient.restoreTask(mutation.taskId);
+            break;
+        }
+        this.publish(acknowledgeMutation(this.state, mutation.id));
+      } catch (error) {
+        if (error instanceof ApiClientError && error.code === 'NETWORK_ERROR') {
+          return;
+        }
+        this.publish(acknowledgeMutation(this.state, mutation.id));
+        void wx.showToast({
+          title: '一项离线操作未能同步',
+          icon: 'none'
+        });
+      }
+    }
   }
 
   private publish(next: TodoState): void {

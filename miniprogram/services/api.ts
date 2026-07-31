@@ -3,6 +3,7 @@ import type { ClientTask } from '../stores/todo-store.js';
 
 const TOKEN_KEY = 'today-todo:session-token';
 const USER_ID_KEY = 'today-todo:user-id';
+const TODO_STATE_KEY = 'today-todo:state';
 
 interface ApiErrorBody {
   readonly code: string;
@@ -106,6 +107,7 @@ export class ApiClient {
   public clearSession(): void {
     wx.removeStorageSync(TOKEN_KEY);
     wx.removeStorageSync(USER_ID_KEY);
+    wx.removeStorageSync(TODO_STATE_KEY);
   }
 
   public async login(): Promise<LoginData> {

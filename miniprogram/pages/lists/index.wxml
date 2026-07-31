@@ -7,6 +7,7 @@
       value="{{newName}}"
       placeholder="新清单名称"
       maxlength="20"
+      aria-label="新清单名称"
       bindinput="onNameInput"
       bindconfirm="onCreate"
     />
@@ -25,7 +26,15 @@
     >
       <view class="list-icon">{{item.isInbox ? '收' : '清'}}</view>
       <text class="list-name">{{item.name}}</text>
-      <text wx:if="{{!item.isInbox}}" class="more">长按管理</text>
+      <button
+        wx:if="{{!item.isInbox}}"
+        class="list-menu"
+        data-id="{{item.id}}"
+        catchtap="onListMenu"
+        aria-label="管理清单 {{item.name}}"
+      >
+        ⋯
+      </button>
     </view>
     <view wx:if="{{!loading && lists.length === 0}}" class="empty">
       暂无清单

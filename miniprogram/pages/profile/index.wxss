@@ -25,7 +25,7 @@
 
 .profile-caption {
   margin-top: 8rpx;
-  color: #94a3b8;
+  color: #64748b;
   font-size: 24rpx;
 }
 
@@ -48,8 +48,8 @@
 }
 
 .menu-hint {
-  color: #94a3b8;
-  font-size: 24rpx;
+  color: #64748b;
+  font-size: 26rpx;
 }
 
 .danger {
@@ -58,8 +58,8 @@
 
 .privacy-note {
   padding: 48rpx 20rpx;
-  color: #94a3b8;
-  font-size: 23rpx;
+  color: #64748b;
+  font-size: 24rpx;
   line-height: 1.7;
   text-align: center;
 }

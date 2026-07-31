@@ -10,8 +10,8 @@
 }
 
 .add-button {
-  width: 84rpx;
-  height: 84rpx;
+  width: 88rpx;
+  height: 88rpx;
   margin: 0;
   padding: 0;
   border: 0;
@@ -21,7 +21,7 @@
   color: #ffffff;
   font-size: 52rpx;
   font-weight: 300;
-  line-height: 80rpx;
+  line-height: 84rpx;
 }
 
 .add-button::after,
@@ -55,7 +55,7 @@
 }
 
 .task-row--pressed {
-  background: #f8fafc;
+  background: #e2e8f0;
 }
 
 .check {
@@ -76,6 +76,7 @@
 }
 
 .task-content {
+  flex: 1;
   min-width: 0;
   margin-left: 22rpx;
 }
@@ -90,7 +91,7 @@
 }
 
 .task-row--done .task-title {
-  color: #94a3b8;
+  color: #64748b;
   text-decoration: line-through;
 }
 
@@ -98,24 +99,46 @@
   display: flex;
   gap: 16rpx;
   margin-top: 10rpx;
-  color: #94a3b8;
-  font-size: 22rpx;
+  color: #64748b;
+  font-size: 24rpx;
 }
 
 .priority {
+  padding: 2rpx 10rpx;
+  border-radius: 8rpx;
   font-weight: 700;
 }
 
 .priority--HIGH {
-  color: #ef4444;
+  background: #fee2e2;
+  color: #991b1b;
 }
 
 .priority--MEDIUM {
-  color: #f59e0b;
+  background: #fef3c7;
+  color: #92400e;
 }
 
 .priority--LOW {
-  color: #22c55e;
+  background: #dcfce7;
+  color: #14532d;
+}
+
+.task-more {
+  width: 72rpx;
+  height: 72rpx;
+  margin: 0 0 0 12rpx;
+  padding: 0;
+  border: 0;
+  border-radius: 18rpx;
+  background: transparent;
+  color: #475569;
+  font-size: 34rpx;
+  line-height: 66rpx;
+}
+
+.task-more::after {
+  border: 0;
 }
 
 .quick-create {

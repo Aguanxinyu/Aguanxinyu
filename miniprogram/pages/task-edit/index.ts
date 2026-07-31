@@ -4,12 +4,13 @@ import { todoController } from '../../stores/todo-controller.js';
 
 const PRIORITIES = ['HIGH', 'MEDIUM', 'LOW'] as const;
 const REPEATS = ['NONE', 'DAILY', 'WEEKLY', 'MONTHLY'] as const;
+let navigationTimer: ReturnType<typeof setTimeout> | undefined;
 
 function today(): string {
-  const date = new Date();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${String(date.getFullYear())}-${month}-${day}`;
+  const date = new Date(Date.now() + 8 * 60 * 60 * 1000);
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  return `${String(date.getUTCFullYear())}-${month}-${day}`;
 }
 
 function messageFor(error: unknown): string {
@@ -49,6 +50,13 @@ Page({
     repeatIndex: 0,
     repeats: ['不重复', '每天', '每周', '每月'],
     saving: false
+  },
+
+  onUnload() {
+    if (navigationTimer !== undefined) {
+      clearTimeout(navigationTimer);
+      navigationTimer = undefined;
+    }
   },
 
   onTitleInput(event: WechatMiniprogram.Input) {
@@ -165,7 +173,7 @@ Page({
       };
       await todoController.create(baseInput);
       void wx.showToast({ title: '已保存', icon: 'success' });
-      setTimeout(() => {
+      navigationTimer = setTimeout(() => {
         void wx.navigateBack();
       }, 400);
     } catch (error) {

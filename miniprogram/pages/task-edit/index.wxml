@@ -10,6 +10,7 @@
         placeholder="准备做什么？"
         maxlength="100"
         focus
+        aria-label="待办标题"
         bindinput="onTitleInput"
       />
     </view>
@@ -20,24 +21,35 @@
         placeholder="补充细节（选填）"
         maxlength="1000"
         auto-height
+        aria-label="备注（选填）"
         bindinput="onNotesInput"
       />
     </view>
     <view class="field field--row">
       <text class="label">优先级</text>
-      <picker value="{{priorityIndex}}" range="{{priorities}}" bindchange="onPriorityChange">
+      <picker
+        value="{{priorityIndex}}"
+        range="{{priorities}}"
+        bindchange="onPriorityChange"
+        aria-label="优先级"
+      >
         <view class="picker-value">{{priorities[priorityIndex]}} ›</view>
       </picker>
     </view>
     <view class="field field--row">
       <text class="label">设置日期</text>
-      <switch color="#2563EB" checked="{{hasDueDate}}" bindchange="onDueDateSwitch" />
+      <switch
+        color="#2563EB"
+        checked="{{hasDueDate}}"
+        bindchange="onDueDateSwitch"
+        aria-label="设置截止日期"
+      />
     </view>
     <view wx:if="{{hasDueDate}}" class="inline-fields">
-      <picker mode="date" value="{{date}}" bindchange="onDateChange">
+      <picker mode="date" value="{{date}}" bindchange="onDateChange" aria-label="选择日期">
         <view class="date-chip">{{date}}</view>
       </picker>
-      <picker mode="time" value="{{time}}" bindchange="onTimeChange">
+      <picker mode="time" value="{{time}}" bindchange="onTimeChange" aria-label="选择时间">
         <view class="date-chip">{{hasDueTime ? time : '选择时间'}}</view>
       </picker>
     </view>
@@ -47,11 +59,17 @@
         color="#2563EB"
         checked="{{reminderEnabled}}"
         bindchange="onReminderSwitch"
+        aria-label="开启微信提醒"
       />
     </view>
     <view class="field field--row">
       <text class="label">重复</text>
-      <picker value="{{repeatIndex}}" range="{{repeats}}" bindchange="onRepeatChange">
+      <picker
+        value="{{repeatIndex}}"
+        range="{{repeats}}"
+        bindchange="onRepeatChange"
+        aria-label="重复频率"
+      >
         <view class="picker-value">{{repeats[repeatIndex]}} ›</view>
       </picker>
     </view>
@@ -61,6 +79,7 @@
         value="{{locationName}}"
         placeholder="手动输入地点（选填）"
         maxlength="100"
+        aria-label="地点（选填）"
         bindinput="onLocationInput"
       />
     </view>

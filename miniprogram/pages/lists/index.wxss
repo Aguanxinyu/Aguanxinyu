@@ -50,7 +50,19 @@
   font-size: 30rpx;
 }
 
-.more {
-  color: #94a3b8;
-  font-size: 22rpx;
+.list-menu {
+  width: 72rpx;
+  height: 72rpx;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 18rpx;
+  background: transparent;
+  color: #475569;
+  font-size: 34rpx;
+  line-height: 66rpx;
+}
+
+.list-menu::after {
+  border: 0;
 }

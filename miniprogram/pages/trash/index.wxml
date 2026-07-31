@@ -9,7 +9,12 @@
         <text class="trash-title">{{task.title}}</text>
         <text class="trash-meta">原清单中的状态会在恢复后保留</text>
       </view>
-      <button class="ghost-button restore" data-id="{{task.id}}" bindtap="onRestore">
+      <button
+        class="ghost-button restore"
+        data-id="{{task.id}}"
+        bindtap="onRestore"
+        aria-label="恢复：{{task.title}}"
+      >
         恢复
       </button>
     </view>

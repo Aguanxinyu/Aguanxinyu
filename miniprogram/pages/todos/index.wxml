@@ -7,7 +7,12 @@
     <button class="add-button" bindtap="onOpenEditor" aria-label="创建详细待办">＋</button>
   </view>
 
-  <view wx:if="{{pendingCount > 0}}" class="offline-tip">
+  <view
+    wx:if="{{pendingCount > 0}}"
+    class="offline-tip"
+    aria-live="polite"
+    aria-atomic="true"
+  >
     {{pendingCount}} 项操作将在恢复网络后同步
   </view>
 
@@ -22,9 +27,11 @@
       bindtap="onToggle"
       bindlongpress="onTaskMenu"
       hover-class="task-row--pressed"
-      aria-label="{{task.title}}"
+      role="checkbox"
+      aria-checked="{{task.done}}"
+      aria-label="{{task.title}}，{{task.done ? '已完成' : '未完成'}}"
     >
-      <view class="check">{{task.done ? '✓' : ''}}</view>
+      <view class="check" aria-hidden="true">{{task.done ? '✓' : ''}}</view>
       <view class="task-content">
         <text class="task-title">{{task.title}}</text>
         <view class="task-meta">
@@ -32,6 +39,14 @@
           <text>{{task.dueLabel}}</text>
         </view>
       </view>
+      <button
+        class="task-more"
+        data-id="{{task.id}}"
+        catchtap="onTaskMenu"
+        aria-label="{{task.title}} 的更多操作"
+      >
+        ⋯
+      </button>
     </view>
 
     <view wx:if="{{tasks.length === 0}}" class="empty">

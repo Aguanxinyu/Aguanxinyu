@@ -20,7 +20,7 @@ page {
 
 .page-subtitle {
   margin-top: 8rpx;
-  color: #64748b;
+  color: #475569;
   font-size: 26rpx;
 }
 
@@ -56,7 +56,7 @@ page {
 
 .empty {
   padding: 88rpx 32rpx;
-  color: #94a3b8;
+  color: #64748b;
   text-align: center;
 }
 

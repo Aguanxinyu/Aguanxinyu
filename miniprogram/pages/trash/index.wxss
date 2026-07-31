@@ -31,8 +31,8 @@
 .trash-meta {
   display: block;
   margin-top: 8rpx;
-  color: #94a3b8;
-  font-size: 21rpx;
+  color: #64748b;
+  font-size: 24rpx;
 }
 
 .restore {
