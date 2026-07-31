@@ -12,7 +12,13 @@ export default defineConfig({
         lines: 80,
         functions: 80,
         statements: 80,
-        branches: 80
+        branches: 80,
+        'packages/domain/src/recurrence.ts': {
+          branches: 90
+        },
+        'packages/domain/src/reminder.ts': {
+          branches: 90
+        }
       }
     }
   }

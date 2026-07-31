@@ -33,7 +33,7 @@ export function getTaskGroup(task: Task, now: number): TaskGroup | null {
   return 'UPCOMING';
 }
 
-export function sortTasks(tasks: readonly Task[]): Task[] {
+export function sortTasks(tasks: readonly Task[]): readonly Task[] {
   return [...tasks].sort((left, right) => {
     const dueDifference =
       (left.dueAt ?? Number.POSITIVE_INFINITY) - (right.dueAt ?? Number.POSITIVE_INFINITY);
@@ -51,6 +51,9 @@ export function sortTasks(tasks: readonly Task[]): Task[] {
       return creationDifference;
     }
 
-    return left.id.localeCompare(right.id);
+    if (left.id === right.id) {
+      return 0;
+    }
+    return left.id < right.id ? -1 : 1;
   });
 }

@@ -6,13 +6,19 @@ export type SeriesStatus = 'ACTIVE' | 'ENDED';
 export type ReminderState =
   'SCHEDULED' | 'SENDING' | 'ACCEPTED' | 'DELIVERED' | 'FAILED' | 'SKIPPED' | 'UNKNOWN';
 
-export interface Location {
-  readonly name: string;
-  readonly address?: string;
-  readonly latitude?: number;
-  readonly longitude?: number;
-  readonly source: 'MAP' | 'MANUAL';
-}
+export type Location =
+  | {
+      readonly name: string;
+      readonly address?: string;
+      readonly latitude: number;
+      readonly longitude: number;
+      readonly source: 'MAP';
+    }
+  | {
+      readonly name: string;
+      readonly address?: string;
+      readonly source: 'MANUAL';
+    };
 
 export interface Task {
   readonly id: string;
@@ -23,7 +29,7 @@ export interface Task {
   readonly dueHasTime: boolean;
   readonly priority: Priority;
   readonly status: TaskStatus;
-  readonly originalStatus?: ActiveTaskStatus;
+  readonly originalStatus?: ActiveTaskStatus | undefined;
   readonly listId: string;
   readonly tagIds: readonly string[];
   readonly location?: Location;
@@ -33,17 +39,26 @@ export interface Task {
   readonly version: number;
   readonly createdAt: number;
   readonly updatedAt: number;
-  readonly completedAt?: number;
-  readonly trashedAt?: number;
-  readonly purgeAfterAt?: number;
+  readonly completedAt?: number | undefined;
+  readonly trashedAt?: number | undefined;
+  readonly purgeAfterAt?: number | undefined;
 }
 
-export interface RecurrenceRule {
-  readonly frequency: Frequency;
-  readonly weekdays?: readonly number[];
-  readonly monthDay?: number;
-  readonly endDate?: string;
-}
+export type RecurrenceRule =
+  | {
+      readonly frequency: 'DAILY';
+      readonly endDate?: string;
+    }
+  | {
+      readonly frequency: 'WEEKLY';
+      readonly weekdays: readonly number[];
+      readonly endDate?: string;
+    }
+  | {
+      readonly frequency: 'MONTHLY';
+      readonly monthDay: number;
+      readonly endDate?: string;
+    };
 
 export interface Series {
   readonly id: string;

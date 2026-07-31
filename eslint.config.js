@@ -19,8 +19,7 @@ export default tseslint.config(
       }
     },
     rules: {
-      '@typescript-eslint/consistent-type-imports': 'error',
-      '@typescript-eslint/no-confusing-void-expression': 'off'
+      '@typescript-eslint/consistent-type-imports': 'error'
     }
   },
   {

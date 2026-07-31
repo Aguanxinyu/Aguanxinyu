@@ -27,6 +27,10 @@ function characterLength(value: string): number {
   return Array.from(value).length;
 }
 
+function isPriority(value: unknown): value is Priority {
+  return (PRIORITIES as readonly unknown[]).includes(value);
+}
+
 function resultFor(issues: readonly ValidationIssue[]): ValidationResult {
   return issues.length === 0 ? { valid: true, issues: [] } : { valid: false, issues };
 }
@@ -53,16 +57,20 @@ export function validateTaskInput(input: unknown): ValidationResult {
   }
 
   const notes = input.notes;
-  if (notes !== undefined && (typeof notes !== 'string' || characterLength(notes) > 1000)) {
+  if (notes !== undefined && typeof notes !== 'string') {
+    issues = withIssue(issues, 'notes', 'NOTES_INVALID');
+  } else if (typeof notes === 'string' && characterLength(notes) > 1000) {
     issues = withIssue(issues, 'notes', 'NOTES_TOO_LONG');
   }
 
-  if (!PRIORITIES.includes(input.priority as Priority)) {
+  if (!isPriority(input.priority)) {
     issues = withIssue(issues, 'priority', 'PRIORITY_INVALID');
   }
 
   const tagIds = input.tagIds;
-  if (!Array.isArray(tagIds) || tagIds.length > 5) {
+  if (!Array.isArray(tagIds)) {
+    issues = withIssue(issues, 'tagIds', 'TAG_IDS_INVALID');
+  } else if (tagIds.length > 5) {
     issues = withIssue(issues, 'tagIds', 'TOO_MANY_TAGS');
   }
 

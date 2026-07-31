@@ -67,7 +67,6 @@ function validateRule(series: Series): void {
   if (series.rule.frequency === 'WEEKLY') {
     const weekdays = series.rule.weekdays;
     if (
-      weekdays === undefined ||
       weekdays.length === 0 ||
       weekdays.some((day) => !Number.isInteger(day) || day < 1 || day > 7)
     ) {
@@ -76,8 +75,7 @@ function validateRule(series: Series): void {
   }
   if (
     series.rule.frequency === 'MONTHLY' &&
-    (series.rule.monthDay === undefined ||
-      !Number.isInteger(series.rule.monthDay) ||
+    (!Number.isInteger(series.rule.monthDay) ||
       series.rule.monthDay < 1 ||
       series.rule.monthDay > 31)
   ) {
@@ -92,7 +90,7 @@ function occursOn(series: Series, date: CalendarDate): boolean {
     case 'WEEKLY':
       return new Set(series.rule.weekdays).has(weekday(date));
     case 'MONTHLY': {
-      const targetDay = Math.min(series.rule.monthDay ?? 1, lastDayOfMonth(date.year, date.month));
+      const targetDay = Math.min(series.rule.monthDay, lastDayOfMonth(date.year, date.month));
       return date.day === targetDay;
     }
   }

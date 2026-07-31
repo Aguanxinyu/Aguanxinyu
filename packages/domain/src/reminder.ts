@@ -35,6 +35,9 @@ export function cancelReminder(reminder: Reminder): Reminder {
   if (reminder.state === 'SKIPPED') {
     return reminder;
   }
+  if (reminder.state !== 'SCHEDULED') {
+    throw new DomainError('REMINDER_INVALID_STATE');
+  }
   return {
     ...reminder,
     state: 'SKIPPED'

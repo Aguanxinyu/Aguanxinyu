@@ -1,4 +1,4 @@
-export { DomainError } from './errors.js';
+export { DomainError, type DomainErrorCode } from './errors.js';
 export { getTaskGroup, sortTasks, type TaskGroup } from './grouping.js';
 export { expandOccurrences, occurrenceKey } from './recurrence.js';
 export { cancelReminder, createReminderForTask, reminderTimeFor } from './reminder.js';
