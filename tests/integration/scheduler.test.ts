@@ -1,8 +1,37 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 
-import { createTestSystem } from '../../packages/backend/src/index.js';
+import {
+  ApiService,
+  type BackendDatabase,
+  createTestSystem,
+  MemoryDatabase,
+  Schedulers
+} from '../../packages/backend/src/index.js';
 
 describe('background schedulers', () => {
+  it('runs explicit database retention cleanup during maintenance', () => {
+    const now = Date.UTC(2026, 6, 31, 4);
+    const database = new MemoryDatabase();
+    expectTypeOf(database).toMatchTypeOf<BackendDatabase>();
+    const purgeIdempotency = vi.spyOn(database, 'purgeExpiredIdempotencyResults');
+    const api = new ApiService({
+      database,
+      now: () => now,
+      exchangeLoginCode: (code) => Promise.resolve(code)
+    });
+    const schedulers = new Schedulers({
+      database,
+      api,
+      now: () => now,
+      sendMessage: () => Promise.resolve(),
+      reportError: () => undefined
+    });
+
+    schedulers.materializeAndClean('2026-07-31');
+
+    expect(purgeIdempotency).toHaveBeenCalledExactlyOnceWith(now);
+  });
+
   it('materializes recurring instances without waiting for earlier completion', async () => {
     const now = Date.UTC(2026, 6, 31, 4);
     const system = createTestSystem({ now });

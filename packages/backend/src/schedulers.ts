@@ -52,6 +52,7 @@ export class Schedulers {
     }
 
     this.database.purgeExpiredSessions(now);
+    this.database.purgeExpiredIdempotencyResults(now);
     for (const user of this.database.usersPendingPurge(now)) {
       this.database.purgeUser(user.id);
     }

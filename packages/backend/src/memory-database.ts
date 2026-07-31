@@ -112,6 +112,13 @@ export class MemoryDatabase implements BackendDatabase {
     };
   }
 
+  public purgeExpiredIdempotencyResults(now: number): void {
+    this.snapshot = {
+      ...this.snapshot,
+      idempotency: this.snapshot.idempotency.filter(({ expiresAt }) => expiresAt > now)
+    };
+  }
+
   public tasksForUser(userId: string, status?: Task['status']): readonly Task[] {
     return this.snapshot.tasks.filter(
       (task) => task.userId === userId && (status === undefined || task.status === status)
@@ -264,14 +271,9 @@ export class MemoryDatabase implements BackendDatabase {
     scope: string,
     now: number
   ): HttpResult<ApiData> | undefined {
-    const active = this.snapshot.idempotency.filter(({ expiresAt }) => expiresAt > now);
-    if (active.length !== this.snapshot.idempotency.length) {
-      this.snapshot = {
-        ...this.snapshot,
-        idempotency: active
-      };
-    }
-    return active.find(({ key }) => key === `${userId}:${scope}`)?.result;
+    return this.snapshot.idempotency.find(
+      ({ key, expiresAt }) => key === `${userId}:${scope}` && expiresAt > now
+    )?.result;
   }
 
   public saveIdempotentResult(
