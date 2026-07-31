@@ -39,6 +39,12 @@ describe('task state transitions', () => {
     expect(uncompleteTask(task, now + 1).completedAt).toBeUndefined();
   });
 
+  it('returns an already active todo unchanged when uncompleting', () => {
+    const task = createTask();
+
+    expect(uncompleteTask(task, now)).toBe(task);
+  });
+
   it('trashes a todo and records its original status', () => {
     const task = createTask();
 
@@ -64,6 +70,28 @@ describe('task state transitions', () => {
     expect(restored.trashedAt).toBeUndefined();
     expect(restored.purgeAfterAt).toBeUndefined();
     expect(restored.originalStatus).toBeUndefined();
+  });
+
+  it('restores a trashed todo as a todo', () => {
+    const task = createTask();
+    const restored = restoreTask(trashTask(task, now), now + 1);
+
+    expect(restored).toMatchObject({
+      status: 'TODO',
+      updatedAt: now + 1,
+      version: 3
+    });
+    expect(restored.completedAt).toBeUndefined();
+  });
+
+  it('rejects a corrupted trashed task without its original status', () => {
+    const task = createTask({
+      status: 'TRASHED',
+      trashedAt: now,
+      purgeAfterAt: now + 1
+    });
+
+    expect(() => restoreTask(task, now + 1)).toThrow('TASK_MISSING_ORIGINAL_STATE');
   });
 
   it('rejects invalid transitions from the trash', () => {

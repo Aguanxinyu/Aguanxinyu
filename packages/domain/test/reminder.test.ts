@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import type { ReminderState } from '@today-todo/contracts';
+
 import { cancelReminder, createReminderForTask, reminderTimeFor } from '../src/reminder.js';
 import { createTask } from './fixtures.js';
 
@@ -75,4 +77,33 @@ describe('reminder rules', () => {
     expect(cancelled).not.toBe(reminder);
     expect(reminder.state).toBe('SCHEDULED');
   });
+
+  it('returns an already skipped reminder unchanged', () => {
+    const reminder = {
+      ...createReminderForTask(
+        createTask({ dueAt: now + tenMinutes, dueHasTime: true }),
+        now,
+        'reminder-1'
+      ),
+      state: 'SKIPPED' as const
+    };
+
+    expect(cancelReminder(reminder)).toBe(reminder);
+  });
+
+  it.each<ReminderState>(['SENDING', 'ACCEPTED', 'DELIVERED', 'FAILED', 'UNKNOWN'])(
+    'does not rewrite reminder history from %s to skipped',
+    (state) => {
+      const reminder = {
+        ...createReminderForTask(
+          createTask({ dueAt: now + tenMinutes, dueHasTime: true }),
+          now,
+          'reminder-1'
+        ),
+        state
+      };
+
+      expect(() => cancelReminder(reminder)).toThrow('REMINDER_INVALID_STATE');
+    }
+  );
 });

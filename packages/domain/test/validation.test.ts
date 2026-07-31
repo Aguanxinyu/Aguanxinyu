@@ -25,7 +25,9 @@ describe('task validation', () => {
   it.each([
     [{ ...validInput, title: '' }, 'title', 'TITLE_REQUIRED'],
     [{ ...validInput, title: '待'.repeat(101) }, 'title', 'TITLE_TOO_LONG'],
+    [{ ...validInput, notes: 42 }, 'notes', 'NOTES_INVALID'],
     [{ ...validInput, notes: '注'.repeat(1001) }, 'notes', 'NOTES_TOO_LONG'],
+    [{ ...validInput, tagIds: 'tag-1' }, 'tagIds', 'TAG_IDS_INVALID'],
     [{ ...validInput, tagIds: ['1', '2', '3', '4', '5', '6'] }, 'tagIds', 'TOO_MANY_TAGS'],
     [{ ...validInput, priority: 'URGENT' }, 'priority', 'PRIORITY_INVALID']
   ])('rejects invalid task input %#', (input, field, code) => {

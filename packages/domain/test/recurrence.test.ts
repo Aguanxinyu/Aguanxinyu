@@ -117,6 +117,12 @@ describe('recurrence expansion', () => {
     );
   });
 
+  it('rejects calendar dates that JavaScript would otherwise normalize', () => {
+    expect(() => expandOccurrences(createSeries(), '2026-02-31', '2026-03-02')).toThrow(
+      'RECURRENCE_INVALID_DATE'
+    );
+  });
+
   it('creates stable occurrence keys', () => {
     expect(occurrenceKey('series-1', '2026-07-31')).toBe('series-1:2026-07-31');
     expect(occurrenceKey('series-1', '2026-07-31')).toBe(occurrenceKey('series-1', '2026-07-31'));

@@ -66,4 +66,13 @@ describe('task grouping and sorting', () => {
 
     expect(sortTasks(tasks).map(({ id }) => id)).toEqual(['dated', 'undated']);
   });
+
+  it('uses task ids as a deterministic final tie breaker', () => {
+    const tasks = [
+      createTask({ id: 'task-b', dueAt: tomorrowStart }),
+      createTask({ id: 'task-a', dueAt: tomorrowStart })
+    ];
+
+    expect(sortTasks(tasks).map(({ id }) => id)).toEqual(['task-a', 'task-b']);
+  });
 });
