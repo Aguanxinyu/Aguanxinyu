@@ -48,6 +48,16 @@ function upsertById<T extends { readonly id: string }>(
   return exists ? items.map((item) => (item.id === value.id ? value : item)) : [...items, value];
 }
 
+function upsertByUserAndId<T extends { readonly id: string; readonly userId: string }>(
+  items: readonly T[],
+  value: T
+): readonly T[] {
+  const matches = (item: T): boolean => item.userId === value.userId && item.id === value.id;
+  return items.some(matches)
+    ? items.map((item) => (matches(item) ? value : item))
+    : [...items, value];
+}
+
 export class MemoryDatabase {
   private snapshot: Snapshot = EMPTY_SNAPSHOT;
   private sequence = 0;
@@ -105,7 +115,7 @@ export class MemoryDatabase {
   public saveTask(task: Task): void {
     this.snapshot = {
       ...this.snapshot,
-      tasks: upsertById(this.snapshot.tasks, task)
+      tasks: upsertByUserAndId(this.snapshot.tasks, task)
     };
   }
 
@@ -127,7 +137,7 @@ export class MemoryDatabase {
   public saveList(list: TodoList): void {
     this.snapshot = {
       ...this.snapshot,
-      lists: upsertById(this.snapshot.lists, list)
+      lists: upsertByUserAndId(this.snapshot.lists, list)
     };
   }
 
@@ -158,7 +168,7 @@ export class MemoryDatabase {
   public saveTag(tag: TodoTag): void {
     this.snapshot = {
       ...this.snapshot,
-      tags: upsertById(this.snapshot.tags, tag)
+      tags: upsertByUserAndId(this.snapshot.tags, tag)
     };
   }
 
@@ -187,7 +197,7 @@ export class MemoryDatabase {
   public saveSeries(series: SeriesRecord): void {
     this.snapshot = {
       ...this.snapshot,
-      series: upsertById(this.snapshot.series, series)
+      series: upsertByUserAndId(this.snapshot.series, series)
     };
   }
 
@@ -200,7 +210,7 @@ export class MemoryDatabase {
   public saveReminder(reminder: ReminderRecord): void {
     this.snapshot = {
       ...this.snapshot,
-      reminders: upsertById(this.snapshot.reminders, reminder)
+      reminders: upsertByUserAndId(this.snapshot.reminders, reminder)
     };
   }
 
