@@ -200,10 +200,11 @@ describe('background schedulers', () => {
     system.setNow(now + 31 * 24 * 60 * 60 * 1000);
     await system.runMaintenance('2026-08-31');
 
+    const refreshedTaskUser = await system.login('trash-purge-user');
     const trash = await system.request({
       method: 'GET',
       path: '/v1/trash',
-      token: taskUser.token
+      token: refreshedTaskUser.token
     });
     expect(trash.body.success && trash.body.data).toEqual([]);
 
