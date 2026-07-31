@@ -12,7 +12,7 @@ describe('background schedulers', () => {
   it('runs explicit database retention cleanup during maintenance', () => {
     const now = Date.UTC(2026, 6, 31, 4);
     const database = new MemoryDatabase();
-    expectTypeOf(database).toMatchTypeOf<BackendDatabase>();
+    expectTypeOf(database).toExtend<BackendDatabase>();
     const purgeIdempotency = vi.spyOn(database, 'purgeExpiredIdempotencyResults');
     const api = new ApiService({
       database,
