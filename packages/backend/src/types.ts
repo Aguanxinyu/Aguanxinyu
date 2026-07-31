@@ -1,5 +1,7 @@
 import type { ApiResponse, RecurrenceRule, Reminder, Task } from '@today-todo/contracts';
 
+export const INBOX_LIST_ID = 'inbox';
+
 export type HttpMethod = 'DELETE' | 'GET' | 'PATCH' | 'POST';
 
 export interface HttpRequest {
@@ -49,7 +51,7 @@ export interface UserRecord {
 }
 
 export interface SessionRecord {
-  readonly token: string;
+  readonly tokenHash: string;
   readonly userId: string;
   readonly expiresAt: number;
   readonly createdAt: number;

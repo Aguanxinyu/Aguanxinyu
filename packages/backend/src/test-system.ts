@@ -84,6 +84,7 @@ export class TestSystem {
   private readonly schedulers: Schedulers;
   private currentTime: number;
   private messages: readonly SentMessage[] = [];
+  private errors: readonly string[] = [];
 
   public constructor(options: TestSystemOptions) {
     this.currentTime = options.now;
@@ -103,12 +104,20 @@ export class TestSystem {
         }
         this.messages = [...this.messages, message];
         return Promise.resolve();
+      },
+      reportError: (error, operation) => {
+        const message = error instanceof Error ? error.message : 'UNKNOWN_ERROR';
+        this.errors = [...this.errors, `${operation}:${message}`];
       }
     });
   }
 
   public get sentMessages(): readonly SentMessage[] {
     return this.messages;
+  }
+
+  public get schedulerErrors(): readonly string[] {
+    return this.errors;
   }
 
   public setNow(now: number): void {

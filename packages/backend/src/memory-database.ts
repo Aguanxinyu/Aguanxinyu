@@ -1,5 +1,6 @@
 import type { Task } from '@today-todo/contracts';
 
+import { INBOX_LIST_ID } from './types.js';
 import type {
   ApiData,
   HttpResult,
@@ -14,6 +15,7 @@ import type {
 interface IdempotencyRecord {
   readonly key: string;
   readonly result: HttpResult<ApiData>;
+  readonly expiresAt: number;
 }
 
 interface Snapshot {
@@ -89,9 +91,9 @@ export class MemoryDatabase {
     };
   }
 
-  public findActiveSession(token: string, now: number): SessionRecord | undefined {
+  public findActiveSession(tokenHash: string, now: number): SessionRecord | undefined {
     return this.snapshot.sessions.find(
-      (session) => session.token === token && session.expiresAt > now
+      (session) => session.tokenHash === tokenHash && session.expiresAt > now
     );
   }
 
@@ -99,6 +101,13 @@ export class MemoryDatabase {
     this.snapshot = {
       ...this.snapshot,
       sessions: this.snapshot.sessions.filter((session) => session.userId !== userId)
+    };
+  }
+
+  public purgeExpiredSessions(now: number): void {
+    this.snapshot = {
+      ...this.snapshot,
+      sessions: this.snapshot.sessions.filter(({ expiresAt }) => expiresAt > now)
     };
   }
 
@@ -153,7 +162,7 @@ export class MemoryDatabase {
         task.userId === userId && task.listId === listId
           ? {
               ...task,
-              listId: 'inbox',
+              listId: INBOX_LIST_ID,
               version: task.version + 1
             }
           : task
@@ -222,8 +231,8 @@ export class MemoryDatabase {
     return this.snapshot.reminderGrants[userId] ?? 0;
   }
 
-  public addReminderGrant(userId: string): number {
-    const available = this.reminderGrantFor(userId) + 1;
+  public addReminderGrant(userId: string, maximum: number): number {
+    const available = Math.min(this.reminderGrantFor(userId) + 1, maximum);
     this.snapshot = {
       ...this.snapshot,
       reminderGrants: {
@@ -249,22 +258,35 @@ export class MemoryDatabase {
     return true;
   }
 
-  public findIdempotentResult(userId: string, requestId: string): HttpResult<ApiData> | undefined {
-    return this.snapshot.idempotency.find(({ key }) => key === `${userId}:${requestId}`)?.result;
+  public findIdempotentResult(
+    userId: string,
+    scope: string,
+    now: number
+  ): HttpResult<ApiData> | undefined {
+    const active = this.snapshot.idempotency.filter(({ expiresAt }) => expiresAt > now);
+    if (active.length !== this.snapshot.idempotency.length) {
+      this.snapshot = {
+        ...this.snapshot,
+        idempotency: active
+      };
+    }
+    return active.find(({ key }) => key === `${userId}:${scope}`)?.result;
   }
 
   public saveIdempotentResult(
     userId: string,
-    requestId: string,
-    result: HttpResult<ApiData>
+    scope: string,
+    result: HttpResult<ApiData>,
+    expiresAt: number
   ): void {
     this.snapshot = {
       ...this.snapshot,
       idempotency: [
         ...this.snapshot.idempotency,
         {
-          key: `${userId}:${requestId}`,
-          result
+          key: `${userId}:${scope}`,
+          result,
+          expiresAt
         }
       ]
     };
@@ -287,6 +309,7 @@ export class MemoryDatabase {
       tags: this.snapshot.tags.filter((tag) => tag.userId !== userId),
       series: this.snapshot.series.filter((series) => series.userId !== userId),
       reminders: this.snapshot.reminders.filter((reminder) => reminder.userId !== userId),
+      idempotency: this.snapshot.idempotency.filter(({ key }) => !key.startsWith(`${userId}:`)),
       reminderGrants: Object.fromEntries(
         Object.entries(this.snapshot.reminderGrants).filter(([id]) => id !== userId)
       )

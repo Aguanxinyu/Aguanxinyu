@@ -9,6 +9,7 @@ export interface SchedulerOptions {
   readonly api: ApiService;
   readonly now: () => number;
   readonly sendMessage: (message: SentMessage) => Promise<void>;
+  readonly reportError: (error: unknown, operation: string) => void;
 }
 
 export class Schedulers {
@@ -16,34 +17,41 @@ export class Schedulers {
   private readonly api: ApiService;
   private readonly now: () => number;
   private readonly sendMessage: (message: SentMessage) => Promise<void>;
+  private readonly reportError: (error: unknown, operation: string) => void;
 
   public constructor(options: SchedulerOptions) {
     this.database = options.database;
     this.api = options.api;
     this.now = options.now;
     this.sendMessage = options.sendMessage;
+    this.reportError = options.reportError;
   }
 
   public materializeAndClean(throughDate: string): void {
     const now = this.now();
     for (const series of this.database.seriesForUser()) {
-      if (series.status !== 'ACTIVE' || series.startDate > throughDate) {
-        continue;
-      }
-      const dates = expandOccurrences(series, series.startDate, throughDate);
-      for (const date of dates) {
-        const task = this.api.taskFromSeries(series, date, now);
-        if (this.database.findTask(series.userId, task.id) === undefined) {
-          this.database.saveTask(task);
+      try {
+        if (series.status !== 'ACTIVE' || series.startDate > throughDate) {
+          continue;
         }
+        const dates = expandOccurrences(series, series.startDate, throughDate);
+        for (const date of dates) {
+          const task = this.api.taskFromSeries(series, date, now);
+          if (this.database.findTask(series.userId, task.id) === undefined) {
+            this.database.saveTask(task);
+          }
+        }
+        this.database.saveSeries({
+          ...series,
+          materializedThrough: throughDate,
+          updatedAt: now
+        });
+      } catch (error) {
+        this.reportError(error, `materialize-series:${series.id}`);
       }
-      this.database.saveSeries({
-        ...series,
-        materializedThrough: throughDate,
-        updatedAt: now
-      });
     }
 
+    this.database.purgeExpiredSessions(now);
     for (const user of this.database.usersPendingPurge(now)) {
       this.database.purgeUser(user.id);
     }
@@ -85,11 +93,12 @@ export class Schedulers {
           ...reminder,
           state: 'DELIVERED'
         });
-      } catch {
+      } catch (error) {
         this.database.saveReminder({
           ...reminder,
           state: 'FAILED'
         });
+        this.reportError(error, `send-reminder:${reminder.id}`);
       }
     }
   }

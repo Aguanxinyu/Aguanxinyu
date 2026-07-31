@@ -1,3 +1,5 @@
+import { createHash, randomBytes } from 'node:crypto';
+
 import type { RecurrenceRule, Task } from '@today-todo/contracts';
 import {
   completeTask,
@@ -15,6 +17,7 @@ import {
 import { z, ZodError } from 'zod';
 
 import type { MemoryDatabase } from './memory-database.js';
+import { INBOX_LIST_ID } from './types.js';
 import type {
   ApiData,
   AuthData,
@@ -29,6 +32,9 @@ import type {
 
 const SESSION_LIFETIME_MS = 30 * 24 * 60 * 60 * 1000;
 const ACCOUNT_PURGE_DELAY_MS = 7 * 24 * 60 * 60 * 1000;
+const IDEMPOTENCY_LIFETIME_MS = 24 * 60 * 60 * 1000;
+const MAX_REMINDER_GRANTS = 20;
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 const locationSchema = z.discriminatedUnion('source', [
   z.object({
@@ -48,31 +54,31 @@ const locationSchema = z.discriminatedUnion('source', [
 const recurrenceSchema = z.discriminatedUnion('frequency', [
   z.object({
     frequency: z.literal('DAILY'),
-    startDate: z.string(),
-    endDate: z.string().optional()
+    startDate: z.string().regex(DATE_PATTERN),
+    endDate: z.string().regex(DATE_PATTERN).optional()
   }),
   z.object({
     frequency: z.literal('WEEKLY'),
-    startDate: z.string(),
-    endDate: z.string().optional(),
-    weekdays: z.array(z.number().int().min(1).max(7)).min(1)
+    startDate: z.string().regex(DATE_PATTERN),
+    endDate: z.string().regex(DATE_PATTERN).optional(),
+    weekdays: z.array(z.number().int().min(1).max(7)).min(1).max(7)
   }),
   z.object({
     frequency: z.literal('MONTHLY'),
-    startDate: z.string(),
-    endDate: z.string().optional(),
+    startDate: z.string().regex(DATE_PATTERN),
+    endDate: z.string().regex(DATE_PATTERN).optional(),
     monthDay: z.number().int().min(1).max(31)
   })
 ]);
 
 const createTaskSchema = z.object({
-  title: z.string(),
-  notes: z.string().optional(),
+  title: z.string().max(100),
+  notes: z.string().max(1000).optional(),
   priority: z.enum(['HIGH', 'MEDIUM', 'LOW']),
   dueAt: z.number().optional(),
   dueHasTime: z.boolean(),
   listId: z.string().optional(),
-  tagIds: z.array(z.string()),
+  tagIds: z.array(z.string()).max(5),
   location: locationSchema.optional(),
   reminderEnabled: z.boolean().optional(),
   recurrence: recurrenceSchema.optional()
@@ -102,8 +108,12 @@ function failure(status: number, code: string, message: string): HttpResult<neve
   };
 }
 
-function asApiData(result: HttpResult<unknown>): HttpResult<ApiData> {
-  return result as HttpResult<ApiData>;
+function asApiData<T extends ApiData>(result: HttpResult<T>): HttpResult<ApiData> {
+  return result;
+}
+
+function tokenHash(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
 }
 
 function ruleFromInput(input: z.infer<typeof recurrenceSchema>): RecurrenceRule {
@@ -159,19 +169,26 @@ export class ApiService {
         return asApiData(failure(401, 'AUTH_REQUIRED', '登录状态已失效，请重新登录'));
       }
 
+      let idempotencyScope: string | undefined;
       if (request.method !== 'GET') {
         if (request.requestId === undefined || request.requestId.length === 0) {
           return asApiData(failure(400, 'REQUEST_ID_REQUIRED', '写操作必须提供请求标识'));
         }
-        const existing = this.database.findIdempotentResult(user.id, request.requestId);
+        idempotencyScope = `${request.method}:${request.path}:${request.requestId}`;
+        const existing = this.database.findIdempotentResult(user.id, idempotencyScope, this.now());
         if (existing !== undefined) {
           return existing;
         }
       }
 
       const result = this.routeAuthenticated(user, request);
-      if (request.method !== 'GET' && request.requestId !== undefined) {
-        this.database.saveIdempotentResult(user.id, request.requestId, result);
+      if (idempotencyScope !== undefined && result.status >= 200 && result.status < 400) {
+        this.database.saveIdempotentResult(
+          user.id,
+          idempotencyScope,
+          result,
+          this.now() + IDEMPOTENCY_LIFETIME_MS
+        );
       }
       return result;
     } catch (error) {
@@ -197,7 +214,7 @@ export class ApiService {
     if (existing === undefined) {
       this.database.saveUser(user);
       this.database.saveList({
-        id: 'inbox',
+        id: INBOX_LIST_ID,
         userId: user.id,
         name: '收件箱',
         isInbox: true,
@@ -209,9 +226,9 @@ export class ApiService {
       return failure(403, 'ACCOUNT_UNAVAILABLE', '账号正在注销或已被删除');
     }
 
-    const token = this.database.nextId(`session-${user.id}`);
+    const token = randomBytes(32).toString('base64url');
     this.database.saveSession({
-      token,
+      tokenHash: tokenHash(token),
       userId: user.id,
       expiresAt: now + SESSION_LIFETIME_MS,
       createdAt: now
@@ -223,7 +240,7 @@ export class ApiService {
     if (token === undefined) {
       return undefined;
     }
-    const session = this.database.findActiveSession(token, this.now());
+    const session = this.database.findActiveSession(tokenHash(token), this.now());
     if (session === undefined) {
       return undefined;
     }
@@ -259,7 +276,7 @@ export class ApiService {
     if (request.method === 'POST' && request.path === '/v1/reminder-grants') {
       const input = z.object({ accepted: z.boolean() }).parse(request.body);
       const available = input.accepted
-        ? this.database.addReminderGrant(user.id)
+        ? this.database.addReminderGrant(user.id, MAX_REMINDER_GRANTS)
         : this.database.reminderGrantFor(user.id);
       return success(200, { userId: user.id, available });
     }
@@ -307,7 +324,7 @@ export class ApiService {
       return failure(400, validation.issues[0]?.code ?? 'TASK_INVALID', '待办信息不完整');
     }
 
-    const listId = input.listId ?? 'inbox';
+    const listId = input.listId ?? INBOX_LIST_ID;
     if (this.database.findList(user.id, listId) === undefined) {
       return failure(400, 'LIST_NOT_FOUND', '所选清单不存在');
     }
@@ -327,9 +344,12 @@ export class ApiService {
       listId,
       now
     });
+    const reminder =
+      input.reminderEnabled === true
+        ? createReminderForTask(task, now, this.database.nextId('reminder'))
+        : undefined;
     this.database.saveTask(task);
-    if (input.reminderEnabled === true) {
-      const reminder = createReminderForTask(task, now, this.database.nextId('reminder'));
+    if (reminder !== undefined) {
       this.database.saveReminder({ ...reminder, title: task.title });
     }
     return success(201, task);
@@ -459,7 +479,7 @@ export class ApiService {
       return failure(404, 'TASK_NOT_FOUND', '回收站中不存在该待办');
     }
     const listId =
-      this.database.findList(user.id, task.listId) === undefined ? 'inbox' : task.listId;
+      this.database.findList(user.id, task.listId) === undefined ? INBOX_LIST_ID : task.listId;
     const restored = {
       ...restoreTask(task, this.now()),
       listId
