@@ -1,11 +1,11 @@
 import { expandOccurrences, isTrashExpired } from '@today-todo/domain';
 
 import type { ApiService } from './api-service.js';
-import type { MemoryDatabase } from './memory-database.js';
+import type { BackendDatabase } from './database.js';
 import type { SentMessage } from './types.js';
 
 export interface SchedulerOptions {
-  readonly database: MemoryDatabase;
+  readonly database: BackendDatabase;
   readonly api: ApiService;
   readonly now: () => number;
   readonly sendMessage: (message: SentMessage) => Promise<void>;
@@ -13,7 +13,7 @@ export interface SchedulerOptions {
 }
 
 export class Schedulers {
-  private readonly database: MemoryDatabase;
+  private readonly database: BackendDatabase;
   private readonly api: ApiService;
   private readonly now: () => number;
   private readonly sendMessage: (message: SentMessage) => Promise<void>;

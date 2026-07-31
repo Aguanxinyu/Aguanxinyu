@@ -1,5 +1,6 @@
 import type { Task } from '@today-todo/contracts';
 
+import type { BackendDatabase } from './database.js';
 import { INBOX_LIST_ID } from './types.js';
 import type {
   ApiData,
@@ -60,7 +61,7 @@ function upsertByUserAndId<T extends { readonly id: string; readonly userId: str
     : [...items, value];
 }
 
-export class MemoryDatabase {
+export class MemoryDatabase implements BackendDatabase {
   private snapshot: Snapshot = EMPTY_SNAPSHOT;
   private sequence = 0;
 

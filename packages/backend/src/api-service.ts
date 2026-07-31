@@ -16,7 +16,7 @@ import {
 } from '@today-todo/domain';
 import { z, ZodError } from 'zod';
 
-import type { MemoryDatabase } from './memory-database.js';
+import type { BackendDatabase } from './database.js';
 import { INBOX_LIST_ID } from './types.js';
 import type {
   ApiData,
@@ -142,13 +142,13 @@ function ruleFromInput(input: z.infer<typeof recurrenceSchema>): RecurrenceRule 
 }
 
 export interface ApiServiceOptions {
-  readonly database: MemoryDatabase;
+  readonly database: BackendDatabase;
   readonly now: () => number;
   readonly exchangeLoginCode: (code: string) => Promise<string>;
 }
 
 export class ApiService {
-  private readonly database: MemoryDatabase;
+  private readonly database: BackendDatabase;
   private readonly now: () => number;
   private readonly exchangeLoginCode: (code: string) => Promise<string>;
 
