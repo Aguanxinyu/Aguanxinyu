@@ -102,7 +102,10 @@ export class TodoController {
       this.publish(replaceTasks(this.state, tasks, Date.now()));
     } catch (error) {
       if (error instanceof ApiClientError && error.code === 'AUTH_REQUIRED') {
-        this.publish(createTodoState());
+        this.publish({
+          ...createTodoState(),
+          pendingMutations: this.state.pendingMutations
+        });
       }
       throw error;
     }
@@ -191,7 +194,12 @@ export class TodoController {
         }
         this.publish(acknowledgeMutation(this.state, mutation.id));
       } catch (error) {
-        if (error instanceof ApiClientError && error.code === 'NETWORK_ERROR') {
+        if (
+          error instanceof ApiClientError &&
+          (error.code === 'NETWORK_ERROR' ||
+            error.code === 'INTERNAL_ERROR' ||
+            error.code === 'AUTH_REQUIRED')
+        ) {
           return;
         }
         this.publish(acknowledgeMutation(this.state, mutation.id));

@@ -8,8 +8,8 @@
   </view>
 
   <view
-    wx:if="{{pendingCount > 0}}"
     class="offline-tip"
+    hidden="{{pendingCount === 0}}"
     aria-live="polite"
     aria-atomic="true"
   >
@@ -24,19 +24,24 @@
       wx:for-item="task"
       class="task-row {{task.done ? 'task-row--done' : ''}}"
       data-id="{{task.id}}"
-      bindtap="onToggle"
       bindlongpress="onTaskMenu"
       hover-class="task-row--pressed"
-      role="checkbox"
-      aria-checked="{{task.done}}"
-      aria-label="{{task.title}}，{{task.done ? '已完成' : '未完成'}}"
     >
-      <view class="check" aria-hidden="true">{{task.done ? '✓' : ''}}</view>
-      <view class="task-content">
-        <text class="task-title">{{task.title}}</text>
-        <view class="task-meta">
-          <text class="priority priority--{{task.priority}}">{{task.priority}}</text>
-          <text>{{task.dueLabel}}</text>
+      <view
+        class="task-toggle"
+        data-id="{{task.id}}"
+        bindtap="onToggle"
+        role="checkbox"
+        aria-checked="{{task.done}}"
+        aria-label="{{task.title}}，优先级：{{task.priorityLabel}}，截止：{{task.dueLabel}}，{{task.done ? '已完成' : '未完成'}}"
+      >
+        <view class="check" aria-hidden="true">{{task.done ? '✓' : ''}}</view>
+        <view class="task-content">
+          <text class="task-title">{{task.title}}</text>
+          <view class="task-meta">
+            <text class="priority priority--{{task.priority}}">{{task.priorityLabel}}</text>
+            <text>{{task.dueLabel}}</text>
+          </view>
         </view>
       </view>
       <button

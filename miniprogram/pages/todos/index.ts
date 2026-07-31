@@ -5,7 +5,14 @@ import type { ClientTask, TodoState } from '../../stores/todo-store.js';
 interface DisplayTask extends ClientTask {
   readonly dueLabel: string;
   readonly done: boolean;
+  readonly priorityLabel: string;
 }
+
+const PRIORITY_LABELS: Readonly<Record<ClientTask['priority'], string>> = {
+  HIGH: '高',
+  MEDIUM: '中',
+  LOW: '低'
+};
 
 function dateLabel(): string {
   const date = new Date();
@@ -26,7 +33,8 @@ function displayTask(task: ClientTask): DisplayTask {
   return {
     ...task,
     dueLabel,
-    done: task.status === 'DONE'
+    done: task.status === 'DONE',
+    priorityLabel: PRIORITY_LABELS[task.priority]
   };
 }
 

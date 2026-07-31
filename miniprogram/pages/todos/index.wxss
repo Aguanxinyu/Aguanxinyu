@@ -54,6 +54,13 @@
   border-bottom: 0;
 }
 
+.task-toggle {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+}
+
 .task-row--pressed {
   background: #e2e8f0;
 }

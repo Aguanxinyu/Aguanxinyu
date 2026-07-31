@@ -94,8 +94,18 @@ function isEnvelope<T>(value: unknown): value is ApiEnvelope<T> {
   return typeof candidate.success === 'boolean' && 'data' in candidate && 'error' in candidate;
 }
 
-function requestId(): string {
-  return `${String(Date.now())}-${Math.random().toString(36).slice(2)}`;
+function requestId(): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    wx.getRandomValues({
+      length: 16,
+      success: ({ randomValues }) => {
+        resolve(wx.arrayBufferToBase64(randomValues).replace(/[+/=]/g, ''));
+      },
+      fail: () => {
+        reject(new ApiClientError('RANDOM_ID_FAILED', '无法安全生成请求标识'));
+      }
+    });
+  });
 }
 
 export class ApiClient {
@@ -191,13 +201,14 @@ export class ApiClient {
     return this.request('POST', '/v1/account/deletion', undefined, true);
   }
 
-  private request<T>(
+  private async request<T>(
     method: 'DELETE' | 'GET' | 'POST',
     path: string,
     data?: unknown,
     isWrite = false
   ): Promise<T> {
     const token = this.getStoredToken();
+    const writeRequestId = isWrite ? await requestId() : null;
     return new Promise<T>((resolve, reject) => {
       let baseUrl: string;
       try {
@@ -214,7 +225,7 @@ export class ApiClient {
         header: {
           'content-type': 'application/json',
           ...(token === null ? {} : { 'x-session-token': token }),
-          ...(isWrite ? { 'x-request-id': requestId() } : {})
+          ...(writeRequestId === null ? {} : { 'x-request-id': writeRequestId })
         },
         success: ({ statusCode, data: responseData }) => {
           if (!isEnvelope<T>(responseData)) {

@@ -279,12 +279,13 @@ export class MemoryDatabase {
     result: HttpResult<ApiData>,
     expiresAt: number
   ): void {
+    const key = `${userId}:${scope}`;
     this.snapshot = {
       ...this.snapshot,
       idempotency: [
-        ...this.snapshot.idempotency,
+        ...this.snapshot.idempotency.filter((record) => record.key !== key),
         {
-          key: `${userId}:${scope}`,
+          key,
           result,
           expiresAt
         }
