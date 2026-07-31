@@ -1,0 +1,23 @@
+{
+  "name": "@today-todo/backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "@today-todo/contracts": "0.1.0",
+    "@today-todo/domain": "0.1.0",
+    "protobufjs": "8.7.1",
+    "tablestore": "^5.6.5",
+    "zod": "^4.4.3"
+  },
+  "scripts": {
+    "build": "tsc --build",
+    "typecheck": "tsc --build --pretty false"
+  }
+}
