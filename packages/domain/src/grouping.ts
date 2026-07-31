@@ -36,14 +36,12 @@ export function getTaskGroup(task: Task, now: number): TaskGroup | null {
 export function sortTasks(tasks: readonly Task[]): Task[] {
   return [...tasks].sort((left, right) => {
     const dueDifference =
-      (left.dueAt ?? Number.POSITIVE_INFINITY) -
-      (right.dueAt ?? Number.POSITIVE_INFINITY);
+      (left.dueAt ?? Number.POSITIVE_INFINITY) - (right.dueAt ?? Number.POSITIVE_INFINITY);
     if (dueDifference !== 0) {
       return dueDifference;
     }
 
-    const priorityDifference =
-      PRIORITY_ORDER[left.priority] - PRIORITY_ORDER[right.priority];
+    const priorityDifference = PRIORITY_ORDER[left.priority] - PRIORITY_ORDER[right.priority];
     if (priorityDifference !== 0) {
       return priorityDifference;
     }

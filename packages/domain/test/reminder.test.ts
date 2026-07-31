@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  cancelReminder,
-  createReminderForTask,
-  reminderTimeFor
-} from '../src/reminder.js';
+import { cancelReminder, createReminderForTask, reminderTimeFor } from '../src/reminder.js';
 import { createTask } from './fixtures.js';
 
 describe('reminder rules', () => {
@@ -46,9 +42,7 @@ describe('reminder rules', () => {
       dueHasTime: true
     });
 
-    expect(() => createReminderForTask(task, now, 'reminder-1')).toThrow(
-      'REMINDER_TOO_LATE'
-    );
+    expect(() => createReminderForTask(task, now, 'reminder-1')).toThrow('REMINDER_TOO_LATE');
   });
 
   it('rejects reminders for completed or trashed tasks', () => {

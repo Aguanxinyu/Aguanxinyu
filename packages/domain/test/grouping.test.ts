@@ -54,12 +54,7 @@ describe('task grouping and sorting', () => {
       })
     ];
 
-    expect(sortTasks(tasks).map(({ id }) => id)).toEqual([
-      'early',
-      'new-high',
-      'old-high',
-      'low'
-    ]);
+    expect(sortTasks(tasks).map(({ id }) => id)).toEqual(['early', 'new-high', 'old-high', 'low']);
     expect(tasks.map(({ id }) => id)).toEqual(['low', 'new-high', 'old-high', 'early']);
   });
 

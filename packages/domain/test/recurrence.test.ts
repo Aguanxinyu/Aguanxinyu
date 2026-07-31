@@ -112,15 +112,13 @@ describe('recurrence expansion', () => {
         '2026-01-10'
       )
     ).toThrow('RECURRENCE_INVALID_MONTH_DAY');
-    expect(() =>
-      expandOccurrences(createSeries(), '2026-02-01', '2026-01-01')
-    ).toThrow('RECURRENCE_INVALID_RANGE');
+    expect(() => expandOccurrences(createSeries(), '2026-02-01', '2026-01-01')).toThrow(
+      'RECURRENCE_INVALID_RANGE'
+    );
   });
 
   it('creates stable occurrence keys', () => {
     expect(occurrenceKey('series-1', '2026-07-31')).toBe('series-1:2026-07-31');
-    expect(occurrenceKey('series-1', '2026-07-31')).toBe(
-      occurrenceKey('series-1', '2026-07-31')
-    );
+    expect(occurrenceKey('series-1', '2026-07-31')).toBe(occurrenceKey('series-1', '2026-07-31'));
   });
 });

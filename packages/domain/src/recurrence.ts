@@ -92,10 +92,7 @@ function occursOn(series: Series, date: CalendarDate): boolean {
     case 'WEEKLY':
       return new Set(series.rule.weekdays).has(weekday(date));
     case 'MONTHLY': {
-      const targetDay = Math.min(
-        series.rule.monthDay ?? 1,
-        lastDayOfMonth(date.year, date.month)
-      );
+      const targetDay = Math.min(series.rule.monthDay ?? 1, lastDayOfMonth(date.year, date.month));
       return date.day === targetDay;
     }
   }

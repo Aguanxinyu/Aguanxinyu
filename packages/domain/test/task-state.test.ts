@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  completeTask,
-  restoreTask,
-  trashTask,
-  uncompleteTask
-} from '../src/task-state.js';
+import { completeTask, restoreTask, trashTask, uncompleteTask } from '../src/task-state.js';
 import { createTask } from './fixtures.js';
 
 describe('task state transitions', () => {

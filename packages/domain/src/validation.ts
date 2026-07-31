@@ -28,9 +28,7 @@ function characterLength(value: string): number {
 }
 
 function resultFor(issues: readonly ValidationIssue[]): ValidationResult {
-  return issues.length === 0
-    ? { valid: true, issues: [] }
-    : { valid: false, issues };
+  return issues.length === 0 ? { valid: true, issues: [] } : { valid: false, issues };
 }
 
 function withIssue(

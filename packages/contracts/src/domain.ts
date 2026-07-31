@@ -4,13 +4,7 @@ export type Priority = 'HIGH' | 'MEDIUM' | 'LOW';
 export type Frequency = 'DAILY' | 'WEEKLY' | 'MONTHLY';
 export type SeriesStatus = 'ACTIVE' | 'ENDED';
 export type ReminderState =
-  | 'SCHEDULED'
-  | 'SENDING'
-  | 'ACCEPTED'
-  | 'DELIVERED'
-  | 'FAILED'
-  | 'SKIPPED'
-  | 'UNKNOWN';
+  'SCHEDULED' | 'SENDING' | 'ACCEPTED' | 'DELIVERED' | 'FAILED' | 'SKIPPED' | 'UNKNOWN';
 
 export interface Location {
   readonly name: string;

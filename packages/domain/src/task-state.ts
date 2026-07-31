@@ -66,11 +66,7 @@ export function restoreTask(task: Task, now: number): Task {
   }
 
   const originalStatus = task.originalStatus;
-  const activeFields = omitTaskFields(task, [
-    'originalStatus',
-    'trashedAt',
-    'purgeAfterAt'
-  ]);
+  const activeFields = omitTaskFields(task, ['originalStatus', 'trashedAt', 'purgeAfterAt']);
 
   if (originalStatus === 'DONE') {
     return {

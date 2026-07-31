@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  validateListName,
-  validateTagName,
-  validateTaskInput
-} from '../src/validation.js';
+import { validateListName, validateTagName, validateTaskInput } from '../src/validation.js';
 
 describe('task validation', () => {
   const validInput = {
