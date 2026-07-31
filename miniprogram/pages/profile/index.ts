@@ -18,9 +18,9 @@ Page({
     this.setData({ syncing: true });
     try {
       await todoController.refresh();
-      wx.showToast({ title: '同步完成', icon: 'success' });
+      void wx.showToast({ title: '同步完成', icon: 'success' });
     } catch (error) {
-      wx.showToast({ title: messageFor(error), icon: 'none' });
+      void wx.showToast({ title: messageFor(error), icon: 'none' });
     } finally {
       this.setData({ syncing: false });
     }
@@ -41,14 +41,14 @@ Page({
           .then(({ purgeAfterAt }) => {
             apiClient.clearSession();
             const date = new Date(purgeAfterAt).toLocaleDateString('zh-CN');
-            wx.showModal({
+            void wx.showModal({
               title: '注销申请已提交',
               content: `账号数据预计在 ${date} 后永久删除。`,
               showCancel: false
             });
           })
           .catch((error: unknown) => {
-            wx.showToast({ title: messageFor(error), icon: 'none' });
+            void wx.showToast({ title: messageFor(error), icon: 'none' });
           });
       }
     });

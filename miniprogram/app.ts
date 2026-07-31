@@ -10,7 +10,7 @@ App<IAppOption>({
     todoController.hydrate();
     void todoController.refresh().catch((error: unknown) => {
       const message = error instanceof ApiClientError ? error.message : '待办同步失败，请稍后重试';
-      wx.showToast({
+      void wx.showToast({
         title: message,
         icon: 'none'
       });

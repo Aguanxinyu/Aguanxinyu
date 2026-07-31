@@ -9,7 +9,8 @@ interface DisplayTask extends ClientTask {
 
 function dateLabel(): string {
   const date = new Date();
-  return `${date.getMonth() + 1}月${date.getDate()}日 · 星期${'日一二三四五六'[date.getDay()]}`;
+  const weekday = '日一二三四五六'.charAt(date.getDay());
+  return `${String(date.getMonth() + 1)}月${String(date.getDate())}日 · 星期${weekday}`;
 }
 
 function displayTask(task: ClientTask): DisplayTask {
@@ -62,9 +63,9 @@ Page({
     try {
       await todoController.refresh();
     } catch (error) {
-      wx.showToast({ title: messageFor(error), icon: 'none' });
+      void wx.showToast({ title: messageFor(error), icon: 'none' });
     } finally {
-      wx.stopPullDownRefresh();
+      void wx.stopPullDownRefresh();
     }
   },
 
@@ -86,9 +87,9 @@ Page({
         tagIds: []
       });
       this.setData({ quickTitle: '' });
-      wx.showToast({ title: '已添加', icon: 'success' });
+      void wx.showToast({ title: '已添加', icon: 'success' });
     } catch (error) {
-      wx.showToast({ title: messageFor(error), icon: 'none' });
+      void wx.showToast({ title: messageFor(error), icon: 'none' });
     } finally {
       this.setData({ loading: false });
     }
@@ -102,7 +103,7 @@ Page({
     try {
       await todoController.toggleTask(taskId);
     } catch (error) {
-      wx.showToast({ title: messageFor(error), icon: 'none' });
+      void wx.showToast({ title: messageFor(error), icon: 'none' });
     }
   },
 
@@ -115,7 +116,7 @@ Page({
       itemList: ['移入回收站'],
       success: () => {
         void todoController.trashTask(taskId).catch((error: unknown) => {
-          wx.showToast({ title: messageFor(error), icon: 'none' });
+          void wx.showToast({ title: messageFor(error), icon: 'none' });
         });
       }
     });

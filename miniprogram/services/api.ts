@@ -94,7 +94,7 @@ function isEnvelope<T>(value: unknown): value is ApiEnvelope<T> {
 }
 
 function requestId(): string {
-  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return `${String(Date.now())}-${Math.random().toString(36).slice(2)}`;
 }
 
 export class ApiClient {
@@ -111,11 +111,16 @@ export class ApiClient {
   public async login(): Promise<LoginData> {
     const code = await new Promise<string>((resolve, reject) => {
       wx.login({
-        success: ({ code: loginCode }) =>
-          loginCode.length > 0
-            ? resolve(loginCode)
-            : reject(new ApiClientError('WECHAT_LOGIN_FAILED', '微信登录失败')),
-        fail: () => reject(new ApiClientError('WECHAT_LOGIN_FAILED', '微信登录失败'))
+        success: ({ code: loginCode }) => {
+          if (loginCode.length > 0) {
+            resolve(loginCode);
+          } else {
+            reject(new ApiClientError('WECHAT_LOGIN_FAILED', '微信登录失败'));
+          }
+        },
+        fail: () => {
+          reject(new ApiClientError('WECHAT_LOGIN_FAILED', '微信登录失败'));
+        }
       });
     });
     const result = await this.request<LoginData>('POST', '/v1/auth/login', {
@@ -203,7 +208,7 @@ export class ApiClient {
       wx.request({
         url: `${baseUrl}${path}`,
         method,
-        data,
+        data: data === undefined ? undefined : JSON.stringify(data),
         header: {
           'content-type': 'application/json',
           ...(token === null ? {} : { 'x-session-token': token }),
@@ -223,7 +228,9 @@ export class ApiClient {
           }
           resolve(responseData.data);
         },
-        fail: () => reject(new ApiClientError('NETWORK_ERROR', '网络连接失败，请稍后重试'))
+        fail: () => {
+          reject(new ApiClientError('NETWORK_ERROR', '网络连接失败，请稍后重试'));
+        }
       });
     });
   }

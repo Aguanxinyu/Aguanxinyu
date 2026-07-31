@@ -20,7 +20,7 @@ Page({
     try {
       this.setData({ tasks: await apiClient.listTrash() });
     } catch (error) {
-      wx.showToast({ title: messageFor(error), icon: 'none' });
+      void wx.showToast({ title: messageFor(error), icon: 'none' });
     } finally {
       this.setData({ loading: false });
     }
@@ -36,9 +36,9 @@ Page({
       this.setData({
         tasks: this.data.tasks.filter(({ id }) => id !== taskId)
       });
-      wx.showToast({ title: '已恢复', icon: 'success' });
+      void wx.showToast({ title: '已恢复', icon: 'success' });
     } catch (error) {
-      wx.showToast({ title: messageFor(error), icon: 'none' });
+      void wx.showToast({ title: messageFor(error), icon: 'none' });
     }
   }
 });

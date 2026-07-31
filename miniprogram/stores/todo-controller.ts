@@ -119,7 +119,7 @@ export class TodoController {
     const createdAt = Date.now();
     this.publish(
       enqueueMutation(this.state, {
-        id: `${createdAt}-${Math.random().toString(36).slice(2)}`,
+        id: `${String(createdAt)}-${Math.random().toString(36).slice(2)}`,
         taskId,
         action,
         createdAt

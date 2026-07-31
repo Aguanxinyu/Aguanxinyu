@@ -9,7 +9,7 @@ function today(): string {
   const date = new Date();
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
-  return `${date.getFullYear()}-${month}-${day}`;
+  return `${String(date.getFullYear())}-${month}-${day}`;
 }
 
 function messageFor(error: unknown): string {
@@ -24,8 +24,12 @@ async function requestReminderPermission(): Promise<boolean> {
   return new Promise<boolean>((resolve, reject) => {
     wx.requestSubscribeMessage({
       tmplIds: [templateId],
-      success: (result) => resolve(result[templateId] === 'accept'),
-      fail: () => reject(new ApiClientError('REMINDER_PERMISSION_FAILED', '未能申请提醒权限'))
+      success: (result) => {
+        resolve(result[templateId] === 'accept');
+      },
+      fail: () => {
+        reject(new ApiClientError('REMINDER_PERMISSION_FAILED', '未能申请提醒权限'));
+      }
     });
   });
 }
@@ -98,7 +102,7 @@ Page({
   async onSave() {
     const title = this.data.title.trim();
     if (title.length === 0 || this.data.saving) {
-      wx.showToast({ title: '请输入待办标题', icon: 'none' });
+      void wx.showToast({ title: '请输入待办标题', icon: 'none' });
       return;
     }
 
@@ -108,7 +112,7 @@ Page({
         ).getTime()
       : undefined;
     if (this.data.reminderEnabled && (dueAt === undefined || dueAt - Date.now() < 10 * 60 * 1000)) {
-      wx.showToast({ title: '提醒时间至少需要提前 10 分钟', icon: 'none' });
+      void wx.showToast({ title: '提醒时间至少需要提前 10 分钟', icon: 'none' });
       return;
     }
 
@@ -160,10 +164,12 @@ Page({
             })
       };
       await todoController.create(baseInput);
-      wx.showToast({ title: '已保存', icon: 'success' });
-      setTimeout(() => wx.navigateBack(), 400);
+      void wx.showToast({ title: '已保存', icon: 'success' });
+      setTimeout(() => {
+        void wx.navigateBack();
+      }, 400);
     } catch (error) {
-      wx.showToast({ title: messageFor(error), icon: 'none' });
+      void wx.showToast({ title: messageFor(error), icon: 'none' });
     } finally {
       this.setData({ saving: false });
     }

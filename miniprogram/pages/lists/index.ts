@@ -20,7 +20,7 @@ Page({
     try {
       this.setData({ lists: await apiClient.listLists() });
     } catch (error) {
-      wx.showToast({ title: messageFor(error), icon: 'none' });
+      void wx.showToast({ title: messageFor(error), icon: 'none' });
     } finally {
       this.setData({ loading: false });
     }
@@ -42,7 +42,7 @@ Page({
         newName: ''
       });
     } catch (error) {
-      wx.showToast({ title: messageFor(error), icon: 'none' });
+      void wx.showToast({ title: messageFor(error), icon: 'none' });
     }
   },
 
@@ -63,7 +63,7 @@ Page({
             });
           })
           .catch((error: unknown) => {
-            wx.showToast({ title: messageFor(error), icon: 'none' });
+            void wx.showToast({ title: messageFor(error), icon: 'none' });
           });
       }
     });
