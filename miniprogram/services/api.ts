@@ -208,7 +208,7 @@ export class ApiClient {
       wx.request({
         url: `${baseUrl}${path}`,
         method,
-        data: data === undefined ? undefined : JSON.stringify(data),
+        ...(data === undefined ? {} : { data: JSON.stringify(data) }),
         header: {
           'content-type': 'application/json',
           ...(token === null ? {} : { 'x-session-token': token }),
