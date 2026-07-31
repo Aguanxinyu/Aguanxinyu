@@ -3,6 +3,13 @@ import type { ActiveTaskStatus, Task } from '@today-todo/contracts';
 import { DomainError } from './errors.js';
 import { purgeAtFor } from './trash.js';
 
+function omitTaskFields(task: Task, fields: readonly (keyof Task)[]): Task {
+  const excluded = new Set<string>(fields);
+  return Object.fromEntries(
+    Object.entries(task).filter(([field]) => !excluded.has(field))
+  ) as unknown as Task;
+}
+
 function requireActive(task: Task): asserts task is Task & { status: ActiveTaskStatus } {
   if (task.status === 'TRASHED') {
     throw new DomainError('TASK_INVALID_STATE');
@@ -28,7 +35,7 @@ export function uncompleteTask(task: Task, now: number): Task {
   if (task.status === 'TODO') {
     return task;
   }
-  const { completedAt: _completedAt, ...withoutCompletion } = task;
+  const withoutCompletion = omitTaskFields(task, ['completedAt']);
   return {
     ...withoutCompletion,
     status: 'TODO',
@@ -58,12 +65,12 @@ export function restoreTask(task: Task, now: number): Task {
     throw new DomainError('TASK_MISSING_ORIGINAL_STATE');
   }
 
-  const {
-    originalStatus,
-    trashedAt: _trashedAt,
-    purgeAfterAt: _purgeAfterAt,
-    ...activeFields
-  } = task;
+  const originalStatus = task.originalStatus;
+  const activeFields = omitTaskFields(task, [
+    'originalStatus',
+    'trashedAt',
+    'purgeAfterAt'
+  ]);
 
   if (originalStatus === 'DONE') {
     return {
@@ -74,7 +81,7 @@ export function restoreTask(task: Task, now: number): Task {
     };
   }
 
-  const { completedAt: _completedAt, ...todoFields } = activeFields;
+  const todoFields = omitTaskFields(activeFields, ['completedAt']);
   return {
     ...todoFields,
     status: 'TODO',
