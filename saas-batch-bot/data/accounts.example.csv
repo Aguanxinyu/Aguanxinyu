@@ -1,0 +1,4 @@
+id,username,password,enabled,note
+acc001,user001@example.com,password-here,true,示例账号1
+acc002,user002@example.com,password-here,true,示例账号2
+acc003,user003@example.com,password-here,false,先禁用，验证流程时不用

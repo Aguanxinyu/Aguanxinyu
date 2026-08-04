@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+auth/
+output/
+data/accounts.csv
+*.log
+.DS_Store
+playwright-report/
+test-results/
