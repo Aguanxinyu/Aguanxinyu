@@ -180,7 +180,7 @@ async function openTasksPage(page: Page, config: AppConfig): Promise<void> {
     .first()
     .waitFor({ state: "visible", timeout: config.actionTimeoutMs });
 
-  const tabName = config.mediaTab;
+  const tabName = config.scheme.mediaTab;
   const altTab =
     tabName === "第三方商业媒体训练" ? "第三方新闻媒体训练" : "第三方商业媒体训练";
 
@@ -223,14 +223,14 @@ async function findTaskRows(page: Page, config: AppConfig): Promise<Locator[]> {
     const row = rows.nth(i);
     const text = (await row.innerText().catch(() => "")).replace(/\s+/g, " ");
     if (!text || !text.includes("已生成")) continue;
-    if (config.onlyUnpublishedTasks) {
+    if (config.scheme.onlyUnpublishedTasks) {
       const published = parsePublishedCount(text);
       if (published === null || published > 0) continue;
     }
     const publishBtn = row.locator(config.selectors.taskPublishButton);
     if ((await publishBtn.count()) === 0) continue;
     matched.push(row);
-    if (matched.length >= config.maxTasksPerAccount) break;
+    if (matched.length >= config.scheme.maxTasksPerAccount) break;
   }
 
   return matched;
@@ -250,7 +250,10 @@ async function publishFromTask(
   const checks = dialog.locator(config.selectors.articleCheckbox);
   await checks.first().waitFor({ state: "visible", timeout: config.actionTimeoutMs });
   const total = await checks.count();
-  const limit = Math.min(total, config.maxArticlesPerTask);
+  const limit =
+    config.scheme.selectMode === "all-visible"
+      ? total
+      : Math.min(total, config.scheme.maxArticlesPerTask);
 
   let selected = 0;
   for (let i = 0; i < limit; i += 1) {
@@ -326,7 +329,7 @@ export async function selectTasksAndPublish(
   if (tasks.length === 0) {
     return {
       selectedCount: 0,
-      message: `未找到可发布任务（mediaTab=${config.mediaTab}, onlyUnpublished=${config.onlyUnpublishedTasks}）`,
+      message: `未找到可发布任务（方案=${config.activeScheme}, mediaTab=${config.scheme.mediaTab}, onlyUnpublished=${config.scheme.onlyUnpublishedTasks}）`,
     };
   }
 

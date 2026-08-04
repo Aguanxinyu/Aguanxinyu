@@ -2,7 +2,7 @@
   "baseUrl": "https://v3.xunlingai.com",
   "loginPath": "#/sign",
   "tasksPath": "#/geo/geoList/aifeeds/article",
-  "mediaTab": "第三方新闻媒体训练",
+  "activeScheme": "news-unpublished",
   "headless": false,
   "concurrency": 1,
   "slowMoMs": 80,
@@ -16,10 +16,54 @@
     "min": 400,
     "max": 1200
   },
-  "maxTasksPerAccount": 1,
-  "maxArticlesPerTask": 5,
-  "onlyUnpublishedTasks": true,
   "reuseStorageState": true,
+  "schemes": {
+    "news-unpublished": {
+      "label": "第三方新闻媒体 - 只发未发布任务",
+      "mediaTab": "第三方新闻媒体训练",
+      "maxTasksPerAccount": 1,
+      "maxArticlesPerTask": 5,
+      "onlyUnpublishedTasks": true,
+      "selectMode": "first-n",
+      "description": "每个账号处理 1 个未发布任务，勾选前 5 篇文章后发布"
+    },
+    "business-unpublished": {
+      "label": "第三方商业媒体 - 只发未发布任务",
+      "mediaTab": "第三方商业媒体训练",
+      "maxTasksPerAccount": 1,
+      "maxArticlesPerTask": 5,
+      "onlyUnpublishedTasks": true,
+      "selectMode": "first-n",
+      "description": "商业媒体 Tab；每个账号 1 个未发布任务，勾选前 5 篇"
+    },
+    "news-batch-3": {
+      "label": "第三方新闻媒体 - 每号发3个任务",
+      "mediaTab": "第三方新闻媒体训练",
+      "maxTasksPerAccount": 3,
+      "maxArticlesPerTask": 3,
+      "onlyUnpublishedTasks": true,
+      "selectMode": "first-n",
+      "description": "每个账号连续处理最多 3 个未发布任务，每任务勾 3 篇"
+    },
+    "selfmedia-unpublished": {
+      "label": "自媒体训练 - 只发未发布任务",
+      "mediaTab": "自媒体训练",
+      "maxTasksPerAccount": 1,
+      "maxArticlesPerTask": 5,
+      "onlyUnpublishedTasks": true,
+      "selectMode": "first-n",
+      "description": "自媒体 Tab；需账号已有自媒体任务数据"
+    },
+    "web-unpublished": {
+      "label": "智能体官网训练 - 只发未发布任务",
+      "mediaTab": "智能体官网训练",
+      "maxTasksPerAccount": 1,
+      "maxArticlesPerTask": 5,
+      "onlyUnpublishedTasks": true,
+      "selectMode": "first-n",
+      "description": "智能体官网 Tab"
+    }
+  },
   "selectors": {
     "openLoginTrigger": "span.text:has-text('登录')",
     "loginForm": ".login-form",
@@ -29,7 +73,7 @@
     "agreeChecked": ".login-form label.agree-checkbox.is-checked",
     "loginButton": ".login-form button.el-button--primary",
     "loggedInMarker": "text=用户名：",
-    "mediaTab": "button:has-text('第三方新闻媒体训练'), .el-radio-button:has-text('第三方新闻媒体训练'), .el-tabs__item:has-text('第三方新闻媒体训练')",
+    "mediaTab": "button.el-button",
     "taskRow": ".el-table__body tr",
     "taskPublishButton": "button:has-text('查看发布')",
     "articleDialog": ".el-dialog:has-text('文章列表')",

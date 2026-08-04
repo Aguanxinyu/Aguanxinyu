@@ -7,6 +7,7 @@
   "scripts": {
     "start": "tsx src/index.ts",
     "run": "tsx src/index.ts",
+    "schemes": "tsx src/index.ts --list-schemes",
     "dry-run": "tsx src/index.ts --dry-run",
     "failed": "tsx src/index.ts --only-failed",
     "typecheck": "tsc --noEmit"

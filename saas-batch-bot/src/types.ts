@@ -3,6 +3,18 @@ export type DelayRange = {
   max: number;
 };
 
+export type SelectMode = "first-n" | "all-visible";
+
+export type ClickScheme = {
+  label: string;
+  description?: string;
+  mediaTab: string;
+  maxTasksPerAccount: number;
+  maxArticlesPerTask: number;
+  onlyUnpublishedTasks: boolean;
+  selectMode: SelectMode;
+};
+
 export type Selectors = {
   openLoginTrigger: string;
   loginForm: string;
@@ -25,7 +37,7 @@ export type AppConfig = {
   baseUrl: string;
   loginPath: string;
   tasksPath: string;
-  mediaTab: string;
+  activeScheme: string;
   headless: boolean;
   concurrency: number;
   slowMoMs: number;
@@ -33,10 +45,10 @@ export type AppConfig = {
   actionTimeoutMs: number;
   delayBetweenAccountsMs: DelayRange;
   delayBetweenActionsMs: DelayRange;
-  maxTasksPerAccount: number;
-  maxArticlesPerTask: number;
-  onlyUnpublishedTasks: boolean;
   reuseStorageState: boolean;
+  schemes: Record<string, ClickScheme>;
+  /** Resolved active scheme (filled by config loader). */
+  scheme: ClickScheme;
   selectors: Selectors;
   paths: {
     accountsCsv: string;
