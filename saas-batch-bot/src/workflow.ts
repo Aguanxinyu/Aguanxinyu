@@ -11,8 +11,14 @@ export type WorkflowOutcome = {
   message: string;
 };
 
-function joinUrl(baseUrl: string, pathname: string): string {
-  return new URL(pathname, baseUrl).toString();
+/** Support both normal paths and Vue hash routes like `#/sign`. */
+export function buildAppUrl(baseUrl: string, routePath: string): string {
+  if (/^https?:\/\//i.test(routePath)) return routePath;
+  if (routePath.startsWith("#")) {
+    const base = baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
+    return `${base}${routePath}`;
+  }
+  return new URL(routePath, baseUrl).toString();
 }
 
 function storageStatePath(config: AppConfig, account: Account): string {
@@ -24,71 +30,150 @@ async function humanPause(config: AppConfig): Promise<void> {
   await sleepRange(config.delayBetweenActionsMs);
 }
 
-async function firstVisible(page: Page, selector: string) {
-  const locator = page.locator(selector).first();
-  await locator.waitFor({ state: "visible", timeout: 8000 });
-  return locator;
+async function isLoggedIn(page: Page, config: AppConfig): Promise<boolean> {
+  if (await page.locator(config.selectors.loggedInMarker).first().isVisible().catch(() => false)) {
+    return true;
+  }
+  // Fallback: login form gone + no top-right bare "登录"
+  const loginFormVisible = await page
+    .locator(config.selectors.loginForm)
+    .first()
+    .isVisible()
+    .catch(() => false);
+  if (loginFormVisible) return false;
+
+  const hasToken = await page.evaluate(() => {
+    const keys = Object.keys(localStorage);
+    return keys.some((k) => /token|user|auth|uid/i.test(k) && !!localStorage.getItem(k));
+  });
+  return hasToken;
+}
+
+async function openLoginForm(page: Page, config: AppConfig): Promise<void> {
+  const username = page.locator(config.selectors.usernameInput).first();
+  if (await username.isVisible().catch(() => false)) return;
+
+  const trigger = page.locator(config.selectors.openLoginTrigger).first();
+  if (await trigger.isVisible().catch(() => false)) {
+    await trigger.click({ force: true });
+    await page.waitForTimeout(800);
+  }
+
+  // Last resort: click any visible span/button whose text is exactly 登录
+  if (!(await username.isVisible().catch(() => false))) {
+    await page.evaluate(() => {
+      const el = [...document.querySelectorAll("span,button,a")].find(
+        (node) => node.textContent?.trim() === "登录" && (node as HTMLElement).offsetParent,
+      ) as HTMLElement | undefined;
+      el?.click();
+    });
+    await page.waitForTimeout(800);
+  }
+
+  await username.waitFor({ state: "visible", timeout: config.actionTimeoutMs });
+}
+
+async function ensureAgreementChecked(page: Page, config: AppConfig): Promise<void> {
+  const checked = page.locator(config.selectors.agreeChecked).first();
+  if (await checked.isVisible().catch(() => false)) return;
+
+  await page.locator(config.selectors.agreeCheckbox).first().click({ force: true });
+  await page.waitForTimeout(200);
+
+  if (!(await checked.isVisible().catch(() => false))) {
+    throw new Error("未能勾选《隐私政策》和《服务协议》，请检查页面");
+  }
 }
 
 /**
- * Adapt these steps to your real SaaS DOM.
- * Prefer stable selectors (data-testid / role / exact text) over brittle CSS.
+ * 讯灵AI（xunlingai.com）账号密码登录。
+ * 登录接口：POST /?act=login  body: {username,password,sig}
  */
 export async function ensureLoggedIn(
   page: Page,
   config: AppConfig,
   account: Account,
 ): Promise<void> {
-  const tasksUrl = joinUrl(config.baseUrl, config.tasksPath);
+  const tasksUrl = buildAppUrl(config.baseUrl, config.tasksPath);
   await page.goto(tasksUrl, { waitUntil: "domcontentloaded" });
+  await page.waitForTimeout(1500);
 
-  // Already in app?
-  const taskProbe = page.locator(config.selectors.taskRow).first();
-  if (await taskProbe.isVisible().catch(() => false)) {
+  if (await isLoggedIn(page, config)) {
     return;
   }
 
-  const loginUrl = joinUrl(config.baseUrl, config.loginPath);
+  const loginUrl = buildAppUrl(config.baseUrl, config.loginPath);
   await page.goto(loginUrl, { waitUntil: "domcontentloaded" });
+  await page.waitForTimeout(1500);
+  await openLoginForm(page, config);
   await humanPause(config);
 
-  const username = await firstVisible(page, config.selectors.usernameInput);
-  await username.fill(account.username);
+  await page.locator(config.selectors.usernameInput).first().fill(account.username);
   await humanPause(config);
-
-  const password = await firstVisible(page, config.selectors.passwordInput);
-  await password.fill(account.password);
+  await page.locator(config.selectors.passwordInput).first().fill(account.password);
   await humanPause(config);
+  await ensureAgreementChecked(page, config);
 
-  const loginButton = await firstVisible(page, config.selectors.loginButton);
-  await loginButton.click();
-  await page.waitForLoadState("networkidle").catch(() => undefined);
-  await humanPause(config);
+  const loginResponsePromise = page
+    .waitForResponse(
+      (res) => res.url().includes("act=login") && res.request().method() === "POST",
+      { timeout: config.actionTimeoutMs },
+    )
+    .catch(() => null);
 
+  await page.locator(config.selectors.loginButton).first().click();
+  const loginResponse = await loginResponsePromise;
+
+  if (loginResponse) {
+    let payload: { error?: number; message?: string } = {};
+    try {
+      payload = (await loginResponse.json()) as { error?: number; message?: string };
+    } catch {
+      // ignore non-json
+    }
+    if (payload.error && payload.error !== 0) {
+      throw new Error(`登录失败: ${payload.message || `error=${payload.error}`}`);
+    }
+  }
+
+  await page.waitForTimeout(2000);
+
+  // Prefer landing on tasks page after login
   await page.goto(tasksUrl, { waitUntil: "domcontentloaded" });
-  await page.locator(config.selectors.taskRow).first().waitFor({
-    state: "visible",
-    timeout: config.actionTimeoutMs,
-  });
+  await page.waitForTimeout(1500);
+
+  if (!(await isLoggedIn(page, config))) {
+    const toast = (
+      await page.locator(".el-message, .el-message-box__message").allTextContents()
+    )
+      .map((t) => t.trim())
+      .filter(Boolean)
+      .join("; ");
+    throw new Error(toast ? `登录失败: ${toast}` : "登录后仍未检测到登录态");
+  }
 }
 
 /**
  * Select up to N visible task checkboxes, go next, then publish.
- * Customize selection rules here (by status, keyword, date, etc.).
+ * 任务页选择器需按真实「AI授课（发布）」页面再微调。
  */
 export async function selectTasksAndPublish(
   page: Page,
   config: AppConfig,
 ): Promise<WorkflowOutcome> {
-  await page.goto(joinUrl(config.baseUrl, config.tasksPath), {
+  await page.goto(buildAppUrl(config.baseUrl, config.tasksPath), {
     waitUntil: "domcontentloaded",
   });
+  await page.waitForTimeout(1500);
   await humanPause(config);
+
+  const rows = page.locator(config.selectors.taskRow);
+  await rows.first().waitFor({ state: "visible", timeout: config.actionTimeoutMs }).catch(() => undefined);
 
   const checkboxes = page.locator(config.selectors.taskCheckbox);
   const total = await checkboxes.count();
   if (total === 0) {
-    return { selectedCount: 0, message: "未找到可勾选任务" };
+    return { selectedCount: 0, message: "未找到可勾选任务（请确认 tasksPath / 选择器）" };
   }
 
   const limit = Math.min(total, config.maxTasksPerAccount);
@@ -97,10 +182,14 @@ export async function selectTasksAndPublish(
   for (let i = 0; i < limit; i += 1) {
     const box = checkboxes.nth(i);
     if (!(await box.isVisible().catch(() => false))) continue;
-    if (await box.isChecked().catch(() => false)) continue;
-    await box.check({ force: true }).catch(async () => {
-      await box.click({ force: true });
-    });
+
+    const alreadyChecked = await box.evaluate((el) => {
+      if (el instanceof HTMLInputElement) return el.checked;
+      return !!el.closest(".is-checked, .el-checkbox.is-checked");
+    }).catch(() => false);
+    if (alreadyChecked) continue;
+
+    await box.click({ force: true });
     selectedCount += 1;
     await humanPause(config);
   }
@@ -110,9 +199,10 @@ export async function selectTasksAndPublish(
   }
 
   const nextButton = page.locator(config.selectors.nextButton).first();
-  await nextButton.waitFor({ state: "visible", timeout: config.actionTimeoutMs });
-  await nextButton.click();
-  await humanPause(config);
+  if (await nextButton.isVisible().catch(() => false)) {
+    await nextButton.click();
+    await humanPause(config);
+  }
 
   const publishButton = page.locator(config.selectors.publishButton).first();
   await publishButton.waitFor({ state: "visible", timeout: config.actionTimeoutMs });
@@ -126,8 +216,6 @@ export async function selectTasksAndPublish(
     .catch(() => false);
 
   if (!ok) {
-    // Some SaaS apps only redirect / disable the button on success.
-    // Treat "publish button gone or disabled" as soft success.
     const stillEnabled = await publishButton.isEnabled().catch(() => false);
     const stillVisible = await publishButton.isVisible().catch(() => false);
     if (stillEnabled && stillVisible) {

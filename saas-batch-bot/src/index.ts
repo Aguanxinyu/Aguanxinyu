@@ -98,10 +98,8 @@ async function main(): Promise<void> {
     );
   }
 
-  if (config.baseUrl.includes("your-saas.example.com")) {
-    log.warn(
-      "当前仍是示例域名。请先修改 config/default.json 的 baseUrl 与 selectors，再正式跑号。",
-    );
+  if (!config.baseUrl.includes("xunlingai.com")) {
+    log.warn("当前 baseUrl 不是 xunlingai.com，请确认 config/default.json 是否正确。");
   }
 
   const accounts = await loadAccounts(accountsPath);

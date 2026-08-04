@@ -30,18 +30,21 @@ npx playwright install chromium
 cp data/accounts.example.csv data/accounts.csv
 ```
 
-2. 修改 `config/default.json`：
-   - `baseUrl` / `loginPath` / `tasksPath`
-   - `selectors.*`（按真实 SaaS 页面改）
-   - `maxTasksPerAccount`（每个账号勾几个任务）
+2. 已预填讯灵站点：
+   - 登录页：`https://www.xunlingai.com/#/sign`
+   - 默认任务页：`#/geo/geoList/aipublish/news`（AI授课 / 第三方新闻媒体）
+   - 登录需勾选《隐私政策》《服务协议》
 
-3. 建议用 Playwright 录制辅助找选择器：
+3. 按你的实际操作入口改 `tasksPath`（常见）：
+   - GEO 发布新闻：`#/geo/geoList/aipublish/news`
+   - GEO 发布商业媒体：`#/geo/geoList/aipublish/business`
+   - A2P 发布：`#/geo/a2p/publish`
+
+4. 可用录制辅助微调发布页选择器：
 
 ```bash
-npx playwright codegen https://your-saas.example.com/login
+npx playwright codegen https://www.xunlingai.com/#/sign
 ```
-
-把录到的稳定选择器填进 `config/default.json`。
 
 ## 运营日常用法
 

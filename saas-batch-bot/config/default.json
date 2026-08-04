@@ -1,7 +1,7 @@
 {
-  "baseUrl": "https://your-saas.example.com",
-  "loginPath": "/login",
-  "tasksPath": "/tasks",
+  "baseUrl": "https://www.xunlingai.com",
+  "loginPath": "#/sign",
+  "tasksPath": "#/geo/geoList/aipublish/news",
   "headless": false,
   "concurrency": 1,
   "slowMoMs": 80,
@@ -18,14 +18,19 @@
   "maxTasksPerAccount": 5,
   "reuseStorageState": true,
   "selectors": {
-    "usernameInput": "input[name='username'], input[type='email'], #username",
-    "passwordInput": "input[name='password'], input[type='password'], #password",
-    "loginButton": "button[type='submit'], button:has-text('登录'), button:has-text('Login')",
-    "taskCheckbox": "[data-testid='task-checkbox'], input[type='checkbox'][name='task'], .task-item input[type='checkbox']",
-    "taskRow": "[data-testid='task-row'], .task-item, tr.task-row",
-    "nextButton": "button:has-text('下一步'), button:has-text('Next')",
-    "publishButton": "button:has-text('发布'), button:has-text('Publish')",
-    "successToast": ".toast-success, [data-testid='publish-success'], text=发布成功"
+    "openLoginTrigger": "span.text:has-text('登录')",
+    "loginForm": ".login-form",
+    "usernameInput": ".login-form input[placeholder='请输入账号']",
+    "passwordInput": ".login-form input[type='password']",
+    "agreeCheckbox": ".login-form label.agree-checkbox .el-checkbox__inner",
+    "agreeChecked": ".login-form label.agree-checkbox.is-checked",
+    "loginButton": ".login-form button.el-button--primary",
+    "loggedInMarker": ".layout-container .avatar-container, .user-avatar, .user-name, .el-dropdown .el-avatar",
+    "taskCheckbox": ".el-table__body input.el-checkbox__original, .el-table__body .el-checkbox__inner, .el-table .el-checkbox",
+    "taskRow": ".el-table__body tr, .el-table__row",
+    "nextButton": "button:has-text('下一步'), .el-button:has-text('下一步')",
+    "publishButton": "button:has-text('发布'), .el-button:has-text('发布'), button:has-text('确认发布')",
+    "successToast": ".el-message--success, .el-notification__content:has-text('成功'), text=发布成功"
   },
   "paths": {
     "accountsCsv": "data/accounts.csv",

@@ -4,9 +4,14 @@ export type DelayRange = {
 };
 
 export type Selectors = {
+  openLoginTrigger: string;
+  loginForm: string;
   usernameInput: string;
   passwordInput: string;
+  agreeCheckbox: string;
+  agreeChecked: string;
   loginButton: string;
+  loggedInMarker: string;
   taskCheckbox: string;
   taskRow: string;
   nextButton: string;
