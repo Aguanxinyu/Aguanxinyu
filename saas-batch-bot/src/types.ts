@@ -12,10 +12,12 @@ export type Selectors = {
   agreeChecked: string;
   loginButton: string;
   loggedInMarker: string;
-  taskCheckbox: string;
+  mediaTab: string;
   taskRow: string;
-  nextButton: string;
-  publishButton: string;
+  taskPublishButton: string;
+  articleDialog: string;
+  articleCheckbox: string;
+  articlePublishButton: string;
   successToast: string;
 };
 
@@ -23,6 +25,7 @@ export type AppConfig = {
   baseUrl: string;
   loginPath: string;
   tasksPath: string;
+  mediaTab: string;
   headless: boolean;
   concurrency: number;
   slowMoMs: number;
@@ -31,6 +34,8 @@ export type AppConfig = {
   delayBetweenAccountsMs: DelayRange;
   delayBetweenActionsMs: DelayRange;
   maxTasksPerAccount: number;
+  maxArticlesPerTask: number;
+  onlyUnpublishedTasks: boolean;
   reuseStorageState: boolean;
   selectors: Selectors;
   paths: {

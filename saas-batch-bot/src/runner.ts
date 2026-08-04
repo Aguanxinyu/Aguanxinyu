@@ -109,7 +109,11 @@ export async function runBatch(
         );
         selectedCount = outcome.selectedCount;
         message = outcome.message;
-        status = options.dryRun ? "dry-run" : "success";
+        status = options.dryRun
+          ? "dry-run"
+          : selectedCount === 0
+            ? "skipped"
+            : "success";
         log.info(`[${account.id}] ${status}: ${message}`);
       } catch (error) {
         status = "failed";

@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
-import type { Browser, BrowserContext, Page } from "playwright";
+import type { Browser, BrowserContext, Locator, Page } from "playwright";
 import { chromium } from "playwright";
 import type { Account, AppConfig } from "./types.js";
 import { sleepRange } from "./delay.js";
@@ -30,23 +30,31 @@ async function humanPause(config: AppConfig): Promise<void> {
   await sleepRange(config.delayBetweenActionsMs);
 }
 
+async function gotoWithRetry(page: Page, url: string, attempts = 3): Promise<void> {
+  let lastError: unknown;
+  for (let i = 1; i <= attempts; i += 1) {
+    try {
+      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
+      return;
+    } catch (error) {
+      lastError = error;
+      log.warn(`打开页面失败(${i}/${attempts}): ${url}`);
+      await page.waitForTimeout(1000 * i);
+    }
+  }
+  throw lastError;
+}
+
 async function isLoggedIn(page: Page, config: AppConfig): Promise<boolean> {
   if (await page.locator(config.selectors.loggedInMarker).first().isVisible().catch(() => false)) {
     return true;
   }
-  // Fallback: login form gone + no top-right bare "登录"
   const loginFormVisible = await page
     .locator(config.selectors.loginForm)
     .first()
     .isVisible()
     .catch(() => false);
-  if (loginFormVisible) return false;
-
-  const hasToken = await page.evaluate(() => {
-    const keys = Object.keys(localStorage);
-    return keys.some((k) => /token|user|auth|uid/i.test(k) && !!localStorage.getItem(k));
-  });
-  return hasToken;
+  return !loginFormVisible && /用户名：/.test(await page.locator("body").innerText().catch(() => ""));
 }
 
 async function openLoginForm(page: Page, config: AppConfig): Promise<void> {
@@ -59,7 +67,6 @@ async function openLoginForm(page: Page, config: AppConfig): Promise<void> {
     await page.waitForTimeout(800);
   }
 
-  // Last resort: click any visible span/button whose text is exactly 登录
   if (!(await username.isVisible().catch(() => false))) {
     await page.evaluate(() => {
       const el = [...document.querySelectorAll("span,button,a")].find(
@@ -76,34 +83,25 @@ async function openLoginForm(page: Page, config: AppConfig): Promise<void> {
 async function ensureAgreementChecked(page: Page, config: AppConfig): Promise<void> {
   const checked = page.locator(config.selectors.agreeChecked).first();
   if (await checked.isVisible().catch(() => false)) return;
-
   await page.locator(config.selectors.agreeCheckbox).first().click({ force: true });
   await page.waitForTimeout(200);
-
   if (!(await checked.isVisible().catch(() => false))) {
-    throw new Error("未能勾选《隐私政策》和《服务协议》，请检查页面");
+    throw new Error("未能勾选《隐私政策》和《服务协议》");
   }
 }
 
-/**
- * 讯灵AI（xunlingai.com）账号密码登录。
- * 登录接口：POST /?act=login  body: {username,password,sig}
- */
 export async function ensureLoggedIn(
   page: Page,
   config: AppConfig,
   account: Account,
 ): Promise<void> {
-  const tasksUrl = buildAppUrl(config.baseUrl, config.tasksPath);
-  await page.goto(tasksUrl, { waitUntil: "domcontentloaded" });
+  const homeUrl = buildAppUrl(config.baseUrl, "#/geo/index");
+  await gotoWithRetry(page, homeUrl);
   await page.waitForTimeout(1500);
-
-  if (await isLoggedIn(page, config)) {
-    return;
-  }
+  if (await isLoggedIn(page, config)) return;
 
   const loginUrl = buildAppUrl(config.baseUrl, config.loginPath);
-  await page.goto(loginUrl, { waitUntil: "domcontentloaded" });
+  await gotoWithRetry(page, loginUrl);
   await page.waitForTimeout(1500);
   await openLoginForm(page, config);
   await humanPause(config);
@@ -123,109 +121,234 @@ export async function ensureLoggedIn(
 
   await page.locator(config.selectors.loginButton).first().click();
   const loginResponse = await loginResponsePromise;
-
   if (loginResponse) {
-    let payload: { error?: number; message?: string } = {};
+    let payload: { error?: number; message?: string; user?: unknown } = {};
     try {
-      payload = (await loginResponse.json()) as { error?: number; message?: string };
+      payload = (await loginResponse.json()) as typeof payload;
     } catch {
-      // ignore non-json
+      // ignore
     }
     if (payload.error && payload.error !== 0) {
       throw new Error(`登录失败: ${payload.message || `error=${payload.error}`}`);
     }
+    if (!payload.user && payload.message) {
+      throw new Error(`登录失败: ${payload.message}`);
+    }
   }
 
-  await page.waitForTimeout(2000);
-
-  // Prefer landing on tasks page after login
-  await page.goto(tasksUrl, { waitUntil: "domcontentloaded" });
-  await page.waitForTimeout(1500);
-
+  await page.waitForTimeout(2500);
   if (!(await isLoggedIn(page, config))) {
-    const toast = (
-      await page.locator(".el-message, .el-message-box__message").allTextContents()
-    )
-      .map((t) => t.trim())
-      .filter(Boolean)
-      .join("; ");
-    throw new Error(toast ? `登录失败: ${toast}` : "登录后仍未检测到登录态");
+    throw new Error("登录后仍未检测到登录态");
   }
 }
 
-/**
- * Select up to N visible task checkboxes, go next, then publish.
- * 任务页选择器需按真实「AI授课（发布）」页面再微调。
- */
-export async function selectTasksAndPublish(
+async function clickMediaTab(page: Page, tabName: string): Promise<void> {
+  const tab = page.locator("button.el-button").filter({ hasText: new RegExp(`^${tabName}$`) }).first();
+  if (await tab.isVisible().catch(() => false)) {
+    await tab.click({ force: true });
+    return;
+  }
+  await page.evaluate((name) => {
+    const el = [...document.querySelectorAll("button.el-button")].find(
+      (node) => node.textContent?.trim() === name && (node as HTMLElement).offsetParent,
+    ) as HTMLElement | undefined;
+    el?.click();
+  }, tabName);
+}
+
+async function waitForTaskRows(page: Page, config: AppConfig): Promise<boolean> {
+  try {
+    await page.locator(config.selectors.taskRow).first().waitFor({
+      state: "visible",
+      timeout: 8000,
+    });
+    return (await page.locator(config.selectors.taskRow).count()) > 0;
+  } catch {
+    return false;
+  }
+}
+
+async function openTasksPage(page: Page, config: AppConfig): Promise<void> {
+  const tasksUrl = buildAppUrl(config.baseUrl, config.tasksPath);
+  await gotoWithRetry(page, tasksUrl);
+  await page.waitForTimeout(3000);
+
+  // Wait until media tab buttons are ready.
+  await page
+    .locator("button.el-button")
+    .filter({ hasText: /媒体训练|自媒体训练|官网训练/ })
+    .first()
+    .waitFor({ state: "visible", timeout: config.actionTimeoutMs });
+
+  const tabName = config.mediaTab;
+  const altTab =
+    tabName === "第三方商业媒体训练" ? "第三方新闻媒体训练" : "第三方商业媒体训练";
+
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    log.info(`加载任务列表 attempt=${attempt}, mediaTab=${tabName}`);
+
+    // Already-selected tab often won't refetch. Switch away, then back.
+    await clickMediaTab(page, altTab);
+    await page.waitForTimeout(1000);
+
+    const listPromise = page
+      .waitForResponse(
+        (res) => res.url().includes("generate-task/list") && res.status() === 200,
+        { timeout: config.actionTimeoutMs },
+      )
+      .catch(() => null);
+
+    await clickMediaTab(page, tabName);
+    await listPromise;
+    await page.waitForTimeout(1200);
+
+    if (await waitForTaskRows(page, config)) return;
+  }
+
+  throw new Error(`任务列表加载失败（mediaTab=${tabName}）`);
+}
+
+function parsePublishedCount(rowText: string): number | null {
+  const nums = [...rowText.matchAll(/(\d+)篇/g)].map((m) => Number(m[1]));
+  if (nums.length >= 2) return nums[1];
+  return null;
+}
+
+async function findTaskRows(page: Page, config: AppConfig): Promise<Locator[]> {
+  const rows = page.locator(config.selectors.taskRow);
+  const count = await rows.count();
+  const matched: Locator[] = [];
+
+  for (let i = 0; i < count; i += 1) {
+    const row = rows.nth(i);
+    const text = (await row.innerText().catch(() => "")).replace(/\s+/g, " ");
+    if (!text || !text.includes("已生成")) continue;
+    if (config.onlyUnpublishedTasks) {
+      const published = parsePublishedCount(text);
+      if (published === null || published > 0) continue;
+    }
+    const publishBtn = row.locator(config.selectors.taskPublishButton);
+    if ((await publishBtn.count()) === 0) continue;
+    matched.push(row);
+    if (matched.length >= config.maxTasksPerAccount) break;
+  }
+
+  return matched;
+}
+
+async function publishFromTask(
   page: Page,
   config: AppConfig,
-): Promise<WorkflowOutcome> {
-  await page.goto(buildAppUrl(config.baseUrl, config.tasksPath), {
-    waitUntil: "domcontentloaded",
-  });
-  await page.waitForTimeout(1500);
+  row: Locator,
+  dryRun: boolean,
+): Promise<number> {
+  await row.locator(config.selectors.taskPublishButton).first().click({ force: true });
+  const dialog = page.locator(config.selectors.articleDialog).first();
+  await dialog.waitFor({ state: "visible", timeout: config.actionTimeoutMs });
   await humanPause(config);
 
-  const rows = page.locator(config.selectors.taskRow);
-  await rows.first().waitFor({ state: "visible", timeout: config.actionTimeoutMs }).catch(() => undefined);
+  const checks = dialog.locator(config.selectors.articleCheckbox);
+  await checks.first().waitFor({ state: "visible", timeout: config.actionTimeoutMs });
+  const total = await checks.count();
+  const limit = Math.min(total, config.maxArticlesPerTask);
 
-  const checkboxes = page.locator(config.selectors.taskCheckbox);
-  const total = await checkboxes.count();
-  if (total === 0) {
-    return { selectedCount: 0, message: "未找到可勾选任务（请确认 tasksPath / 选择器）" };
-  }
-
-  const limit = Math.min(total, config.maxTasksPerAccount);
-  let selectedCount = 0;
-
+  let selected = 0;
   for (let i = 0; i < limit; i += 1) {
-    const box = checkboxes.nth(i);
-    if (!(await box.isVisible().catch(() => false))) continue;
-
-    const alreadyChecked = await box.evaluate((el) => {
-      if (el instanceof HTMLInputElement) return el.checked;
-      return !!el.closest(".is-checked, .el-checkbox.is-checked");
-    }).catch(() => false);
-    if (alreadyChecked) continue;
-
-    await box.click({ force: true });
-    selectedCount += 1;
-    await humanPause(config);
+    await checks.nth(i).click({ force: true });
+    selected += 1;
+    await page.waitForTimeout(150);
   }
 
-  if (selectedCount === 0) {
-    return { selectedCount: 0, message: "没有新的可勾选任务" };
+  if (selected === 0) {
+    await page.keyboard.press("Escape").catch(() => undefined);
+    return 0;
   }
 
-  const nextButton = page.locator(config.selectors.nextButton).first();
-  if (await nextButton.isVisible().catch(() => false)) {
-    await nextButton.click();
-    await humanPause(config);
+  const actionBtn = dialog
+    .locator("button")
+    .filter({ hasText: /已选\s*[1-9]/ })
+    .filter({ hasText: /训练|发布/ })
+    .last();
+  await actionBtn.waitFor({ state: "visible", timeout: config.actionTimeoutMs });
+
+  if (dryRun) {
+    log.info(`dry-run：已勾选 ${selected} 篇文章，跳过点击发布`);
+    await page.keyboard.press("Escape").catch(() => undefined);
+    await page.waitForTimeout(500);
+    return selected;
   }
 
-  const publishButton = page.locator(config.selectors.publishButton).first();
-  await publishButton.waitFor({ state: "visible", timeout: config.actionTimeoutMs });
-  await publishButton.click();
-  await humanPause(config);
-
-  const success = page.locator(config.selectors.successToast).first();
-  const ok = await success
+  const toastPromise = page
+    .locator(config.selectors.successToast)
+    .first()
     .waitFor({ state: "visible", timeout: config.actionTimeoutMs })
     .then(() => true)
     .catch(() => false);
 
+  await actionBtn.click();
+  const ok = await toastPromise;
+  await page.waitForTimeout(1500);
+
+  // Close dialog if still open
+  if (await dialog.isVisible().catch(() => false)) {
+    await page.keyboard.press("Escape").catch(() => undefined);
+  }
+
   if (!ok) {
-    const stillEnabled = await publishButton.isEnabled().catch(() => false);
-    const stillVisible = await publishButton.isVisible().catch(() => false);
-    if (stillEnabled && stillVisible) {
-      throw new Error("点击发布后未检测到成功状态，请检查选择器或页面流程");
+    const msg = (
+      await page.locator(".el-message, .el-notification, .el-message-box__message").allTextContents()
+    )
+      .map((t) => t.trim())
+      .filter(Boolean)
+      .join("; ");
+    if (msg && /失败|错误|不足/.test(msg)) {
+      throw new Error(`发布失败: ${msg}`);
     }
+    // Some flows succeed without a toast; accept selected count.
+    log.warn(`未捕获到成功提示，已点击发布按钮（已选 ${selected}）`);
+  }
+
+  return selected;
+}
+
+/**
+ * 讯灵 GEO：AI备课（图文）→ 点任务「发布」→ 勾选文章 → 点击「xxx训练（已选N个）」
+ */
+export async function selectTasksAndPublish(
+  page: Page,
+  config: AppConfig,
+  dryRun = false,
+): Promise<WorkflowOutcome> {
+  await openTasksPage(page, config);
+  await humanPause(config);
+
+  const tasks = await findTaskRows(page, config);
+  if (tasks.length === 0) {
+    return {
+      selectedCount: 0,
+      message: `未找到可发布任务（mediaTab=${config.mediaTab}, onlyUnpublished=${config.onlyUnpublishedTasks}）`,
+    };
+  }
+
+  let selectedCount = 0;
+  const notes: string[] = [];
+
+  for (const [index, row] of tasks.entries()) {
+    const raw = (await row.innerText()).replace(/\s+/g, " ").trim();
+    const name =
+      raw.match(/\d+\s+(.+?)\s+(搜索词场景|品牌场景|意图场景|问答词场景)/)?.[1] ||
+      raw.slice(0, 40) ||
+      `task-${index + 1}`;
+    log.info(`处理任务: ${name}`);
+    const count = await publishFromTask(page, config, row, dryRun);
+    selectedCount += count;
+    notes.push(`${name}: ${count}篇`);
+    await humanPause(config);
   }
 
   return {
     selectedCount,
-    message: `已勾选 ${selectedCount} 个任务并发布`,
+    message: `${dryRun ? "dry-run " : ""}处理 ${tasks.length} 个任务；${notes.join("；")}`,
   };
 }
 
@@ -241,7 +364,7 @@ export async function openAccountContext(
   const context = await browser.newContext({
     storageState: hasState ? statePath : undefined,
     locale: "zh-CN",
-    viewport: { width: 1440, height: 900 },
+    viewport: { width: 1600, height: 1000 },
   });
   context.setDefaultTimeout(config.actionTimeoutMs);
   context.setDefaultNavigationTimeout(config.navigationTimeoutMs);
@@ -278,15 +401,7 @@ export async function runAccountWorkflow(
   try {
     await ensureLoggedIn(page, config, account);
     await persistAccountState(context, config, account);
-
-    if (dryRun) {
-      return {
-        selectedCount: 0,
-        message: "dry-run：已登录并到达任务页，跳过勾选/发布",
-      };
-    }
-
-    const outcome = await selectTasksAndPublish(page, config);
+    const outcome = await selectTasksAndPublish(page, config, dryRun);
     await persistAccountState(context, config, account);
     return outcome;
   } finally {

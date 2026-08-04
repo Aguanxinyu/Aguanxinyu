@@ -1,12 +1,13 @@
 {
-  "baseUrl": "https://www.xunlingai.com",
+  "baseUrl": "https://v3.xunlingai.com",
   "loginPath": "#/sign",
-  "tasksPath": "#/geo/geoList/aipublish/news",
+  "tasksPath": "#/geo/geoList/aifeeds/article",
+  "mediaTab": "第三方新闻媒体训练",
   "headless": false,
   "concurrency": 1,
   "slowMoMs": 80,
   "navigationTimeoutMs": 45000,
-  "actionTimeoutMs": 20000,
+  "actionTimeoutMs": 25000,
   "delayBetweenAccountsMs": {
     "min": 3000,
     "max": 10000
@@ -15,7 +16,9 @@
     "min": 400,
     "max": 1200
   },
-  "maxTasksPerAccount": 5,
+  "maxTasksPerAccount": 1,
+  "maxArticlesPerTask": 5,
+  "onlyUnpublishedTasks": true,
   "reuseStorageState": true,
   "selectors": {
     "openLoginTrigger": "span.text:has-text('登录')",
@@ -25,12 +28,14 @@
     "agreeCheckbox": ".login-form label.agree-checkbox .el-checkbox__inner",
     "agreeChecked": ".login-form label.agree-checkbox.is-checked",
     "loginButton": ".login-form button.el-button--primary",
-    "loggedInMarker": ".layout-container .avatar-container, .user-avatar, .user-name, .el-dropdown .el-avatar",
-    "taskCheckbox": ".el-table__body input.el-checkbox__original, .el-table__body .el-checkbox__inner, .el-table .el-checkbox",
-    "taskRow": ".el-table__body tr, .el-table__row",
-    "nextButton": "button:has-text('下一步'), .el-button:has-text('下一步')",
-    "publishButton": "button:has-text('发布'), .el-button:has-text('发布'), button:has-text('确认发布')",
-    "successToast": ".el-message--success, .el-notification__content:has-text('成功'), text=发布成功"
+    "loggedInMarker": "text=用户名：",
+    "mediaTab": "button:has-text('第三方新闻媒体训练'), .el-radio-button:has-text('第三方新闻媒体训练'), .el-tabs__item:has-text('第三方新闻媒体训练')",
+    "taskRow": ".el-table__body tr",
+    "taskPublishButton": "button:has-text('查看发布')",
+    "articleDialog": ".el-dialog:has-text('文章列表')",
+    "articleCheckbox": ".el-table__body .el-checkbox__inner",
+    "articlePublishButton": "button:has-text('已选')",
+    "successToast": ".el-message--success, .el-notification__content, .el-message:has-text('成功')"
   },
   "paths": {
     "accountsCsv": "data/accounts.csv",

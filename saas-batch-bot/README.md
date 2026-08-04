@@ -30,21 +30,16 @@ npx playwright install chromium
 cp data/accounts.example.csv data/accounts.csv
 ```
 
-2. 已预填讯灵站点：
-   - 登录页：`https://www.xunlingai.com/#/sign`
-   - 默认任务页：`#/geo/geoList/aipublish/news`（AI授课 / 第三方新闻媒体）
-   - 登录需勾选《隐私政策》《服务协议》
+2. 已按讯灵真实流程预填（默认域名 `https://v3.xunlingai.com`）：
+   - 登录页：`#/sign`（需勾选协议）
+   - 任务页：`#/geo/geoList/aifeeds/article`（GEO → AI备课 → 图文）
+   - 流程：切换媒体 Tab → 点任务「查看发布」→ 勾选文章 → 点「xxx训练（已选N个）」
 
-3. 按你的实际操作入口改 `tasksPath`（常见）：
-   - GEO 发布新闻：`#/geo/geoList/aipublish/news`
-   - GEO 发布商业媒体：`#/geo/geoList/aipublish/business`
-   - A2P 发布：`#/geo/a2p/publish`
-
-4. 可用录制辅助微调发布页选择器：
-
-```bash
-npx playwright codegen https://www.xunlingai.com/#/sign
-```
+3. 常用配置（`config/default.json`）：
+   - `mediaTab`：如 `第三方新闻媒体训练` / `第三方商业媒体训练`
+   - `maxTasksPerAccount`：每个账号处理几个任务
+   - `maxArticlesPerTask`：每个任务勾几篇文章
+   - `onlyUnpublishedTasks`：只处理「已发布数量=0」的任务
 
 ## 运营日常用法
 
