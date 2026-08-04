@@ -1,39 +1,17 @@
 # 讯灵多账号批量发布机器人
 
-CSV 驱动的 Playwright 工具：登录 → 按「点击方案」勾选任务/文章 → 发布 → 自动切号，并输出结果表。
+**完全不懂编程？先看这个：**
 
-**运维请直接看：[运维使用手册.md](./运维使用手册.md)**
+👉 [傻瓜式使用教程.md](./傻瓜式使用教程.md)
 
-## 快速开始
+Windows 运维通常只需要：
 
-```bash
-cd saas-batch-bot
-npm install
-npx playwright install chromium
-cp data/accounts.example.csv data/accounts.csv
-# 编辑 accounts.csv 填账号密码
+1. 双击 `一键安装.bat`（首次）
+2. 用 Excel 填写 `data/accounts.csv`
+3. 双击 `开始使用.bat`，按菜单操作  
+   （先演练 1 个号，再正式发布）
 
-npm start -- --list-schemes
-npm start -- --scheme news-unpublished --limit 1 --dry-run
-npm start -- --scheme news-unpublished --limit 5
-```
+更完整说明见：
 
-## 点击方案（运维可配）
-
-在 `config/default.json` 的 `schemes` 里配置，或用命令覆盖：
-
-```bash
-npm start -- --scheme business-unpublished --limit 3
-npm start -- --media-tab 第三方商业媒体训练 --tasks 2 --articles 3 --dry-run
-```
-
-## 目录
-
-```
-saas-batch-bot/
-├── 运维使用手册.md          # 运维操作说明（首选）
-├── config/default.json      # 点击方案 + 默认参数
-├── data/accounts.csv        # 账号表（本地，已 gitignore）
-├── output/                  # 运行结果
-└── src/                     # 源码
-```
+- [傻瓜式使用教程.md](./傻瓜式使用教程.md)
+- [运维使用手册.md](./运维使用手册.md)
