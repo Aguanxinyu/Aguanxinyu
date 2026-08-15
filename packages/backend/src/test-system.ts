@@ -73,6 +73,7 @@ type ResponseData<R extends HttpRequest> = R extends {
 export interface TestSystemOptions {
   readonly now: number;
   readonly sendShouldFail?: boolean;
+  readonly database?: BackendDatabase;
 }
 
 export interface LoginResult {
@@ -90,7 +91,7 @@ export class TestSystem {
 
   public constructor(options: TestSystemOptions) {
     this.currentTime = options.now;
-    const database = new MemoryDatabase();
+    const database = options.database ?? new MemoryDatabase();
     this.storage = database;
     this.api = new ApiService({
       database,
@@ -147,9 +148,8 @@ export class TestSystem {
     return result.body.data;
   }
 
-  public runMaintenance(throughDate: string): Promise<void> {
-    this.schedulers.materializeAndClean(throughDate);
-    return Promise.resolve();
+  public async runMaintenance(throughDate: string): Promise<void> {
+    await this.schedulers.materializeAndClean(throughDate);
   }
 
   public runReminderTicker(at: number): Promise<void> {

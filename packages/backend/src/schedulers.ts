@@ -27,9 +27,9 @@ export class Schedulers {
     this.reportError = options.reportError;
   }
 
-  public materializeAndClean(throughDate: string): void {
+  public async materializeAndClean(throughDate: string): Promise<void> {
     const now = this.now();
-    for (const series of this.database.seriesForUser()) {
+    for (const series of await this.database.seriesForUser()) {
       try {
         if (series.status !== 'ACTIVE' || series.startDate > throughDate) {
           continue;
@@ -37,11 +37,11 @@ export class Schedulers {
         const dates = expandOccurrences(series, series.startDate, throughDate);
         for (const date of dates) {
           const task = this.api.taskFromSeries(series, date, now);
-          if (this.database.findTask(series.userId, task.id) === undefined) {
-            this.database.saveTask(task);
+          if ((await this.database.findTask(series.userId, task.id)) === undefined) {
+            await this.database.saveTask(task);
           }
         }
-        this.database.saveSeries({
+        await this.database.saveSeries({
           ...series,
           materializedThrough: throughDate,
           updatedAt: now
@@ -51,35 +51,35 @@ export class Schedulers {
       }
     }
 
-    this.database.purgeExpiredSessions(now);
-    this.database.purgeExpiredIdempotencyResults(now);
-    for (const user of this.database.usersPendingPurge(now)) {
-      this.database.purgeUser(user.id);
+    await this.database.purgeExpiredSessions(now);
+    await this.database.purgeExpiredIdempotencyResults(now);
+    for (const user of await this.database.usersPendingPurge(now)) {
+      await this.database.purgeUser(user.id);
     }
-    for (const task of this.database.allTasks()) {
+    for (const task of await this.database.allTasks()) {
       if (task.status === 'TRASHED' && isTrashExpired(task, now)) {
-        this.database.deleteTask(task.userId, task.id);
+        await this.database.deleteTask(task.userId, task.id);
       }
     }
   }
 
   public async dispatchReminders(at: number): Promise<void> {
-    for (const reminder of this.database.remindersDueAtOrBefore(at)) {
-      const task = this.database.findTask(reminder.userId, reminder.taskId);
+    for (const reminder of await this.database.remindersDueAtOrBefore(at)) {
+      const task = await this.database.findTask(reminder.userId, reminder.taskId);
       if (
         task === undefined ||
         task.status !== 'TODO' ||
         task.version !== reminder.taskVersion ||
-        this.database.reminderGrantFor(reminder.userId) < 1
+        (await this.database.reminderGrantFor(reminder.userId)) < 1
       ) {
-        this.database.saveReminder({
+        await this.database.saveReminder({
           ...reminder,
           state: 'SKIPPED'
         });
         continue;
       }
 
-      this.database.saveReminder({
+      await this.database.saveReminder({
         ...reminder,
         state: 'SENDING'
       });
@@ -89,13 +89,13 @@ export class Schedulers {
           taskId: reminder.taskId,
           title: reminder.title
         });
-        this.database.consumeReminderGrant(reminder.userId);
-        this.database.saveReminder({
+        await this.database.consumeReminderGrant(reminder.userId);
+        await this.database.saveReminder({
           ...reminder,
           state: 'DELIVERED'
         });
       } catch (error) {
-        this.database.saveReminder({
+        await this.database.saveReminder({
           ...reminder,
           state: 'FAILED'
         });

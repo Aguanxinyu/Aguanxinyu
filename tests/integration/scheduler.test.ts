@@ -9,7 +9,7 @@ import {
 } from '../../packages/backend/src/index.js';
 
 describe('background schedulers', () => {
-  it('runs explicit database retention cleanup during maintenance', () => {
+  it('runs explicit database retention cleanup during maintenance', async () => {
     const now = Date.UTC(2026, 6, 31, 4);
     const database = new MemoryDatabase();
     expectTypeOf(database).toExtend<BackendDatabase>();
@@ -27,7 +27,7 @@ describe('background schedulers', () => {
       reportError: () => undefined
     });
 
-    schedulers.materializeAndClean('2026-07-31');
+    await schedulers.materializeAndClean('2026-07-31');
 
     expect(purgeIdempotency).toHaveBeenCalledExactlyOnceWith(now);
   });
@@ -133,9 +133,9 @@ describe('background schedulers', () => {
       }
     });
     const taskId = created.body.success ? created.body.data.id : '';
-    const reminderState = (): string | undefined =>
-      system.database.findRemindersForTask(user.userId, taskId)[0]?.state;
-    expect(reminderState()).toBe('SCHEDULED');
+    const reminderState = async (): Promise<string | undefined> =>
+      (await system.database.findRemindersForTask(user.userId, taskId))[0]?.state;
+    expect(await reminderState()).toBe('SCHEDULED');
 
     await system.request({
       method: 'DELETE',
@@ -143,7 +143,7 @@ describe('background schedulers', () => {
       token: user.token,
       requestId: 'trash-1'
     });
-    expect(reminderState()).toBe('SKIPPED');
+    expect(await reminderState()).toBe('SKIPPED');
 
     await system.runReminderTicker(now + 50 * 60 * 1000);
     expect(system.sentMessages).toEqual([]);
@@ -154,7 +154,7 @@ describe('background schedulers', () => {
       token: user.token,
       requestId: 'restore-1'
     });
-    expect(reminderState()).toBe('SCHEDULED');
+    expect(await reminderState()).toBe('SCHEDULED');
 
     await system.runReminderTicker(now + 50 * 60 * 1000);
     expect(system.sentMessages).toHaveLength(1);

@@ -12,6 +12,7 @@
   "dependencies": {
     "@today-todo/contracts": "0.1.0",
     "@today-todo/domain": "0.1.0",
+    "pg": "^8.13.1",
     "protobufjs": "8.7.1",
     "tablestore": "^5.6.5",
     "zod": "^4.4.3"

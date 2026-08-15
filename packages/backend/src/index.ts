@@ -1,6 +1,7 @@
 export { ApiService, type ApiServiceOptions } from './api-service.js';
 export type { BackendDatabase } from './database.js';
 export { MemoryDatabase } from './memory-database.js';
+export { PostgresDatabase } from './postgres-database.js';
 export { Schedulers, type SchedulerOptions } from './schedulers.js';
 export {
   createTestSystem,

@@ -15,6 +15,7 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "db:migrate": "node --env-file-if-exists=.env packages/backend/scripts/migrate.js",
     "check": "npm run typecheck && npm run lint && npm run format:check && npm run test:coverage"
   },
   "engines": {
@@ -23,6 +24,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^26.1.2",
+    "@types/pg": "^8.21.0",
     "@vitest/coverage-v8": "^4.1.10",
     "eslint": "^10.8.0",
     "miniprogram-api-typings": "^5.2.2",

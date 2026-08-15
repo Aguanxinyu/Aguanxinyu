@@ -61,108 +61,128 @@ function upsertByUserAndId<T extends { readonly id: string; readonly userId: str
     : [...items, value];
 }
 
+/**
+ * In-memory implementation used by tests and local demos. Methods return
+ * resolved promises so the type stays compatible with `BackendDatabase`.
+ */
 export class MemoryDatabase implements BackendDatabase {
   private snapshot: Snapshot = EMPTY_SNAPSHOT;
   private sequence = 0;
 
-  public nextId(prefix: string): string {
+  public nextId(prefix: string): Promise<string> {
     this.sequence += 1;
-    return `${prefix}-${String(this.sequence).padStart(6, '0')}`;
+    return Promise.resolve(`${prefix}-${String(this.sequence).padStart(6, '0')}`);
   }
 
-  public findUserByOpenId(openId: string): UserRecord | undefined {
-    return this.snapshot.users.find((user) => user.openId === openId);
+  public findUserByOpenId(openId: string): Promise<UserRecord | undefined> {
+    return Promise.resolve(this.snapshot.users.find((user) => user.openId === openId));
   }
 
-  public findUserById(userId: string): UserRecord | undefined {
-    return this.snapshot.users.find(({ id }) => id === userId);
+  public findUserById(userId: string): Promise<UserRecord | undefined> {
+    return Promise.resolve(this.snapshot.users.find(({ id }) => id === userId));
   }
 
-  public saveUser(user: UserRecord): void {
+  public saveUser(user: UserRecord): Promise<void> {
     this.snapshot = {
       ...this.snapshot,
       users: upsertById(this.snapshot.users, user)
     };
+    return Promise.resolve();
   }
 
-  public saveSession(session: SessionRecord): void {
+  public saveSession(session: SessionRecord): Promise<void> {
     this.snapshot = {
       ...this.snapshot,
       sessions: [...this.snapshot.sessions, session]
     };
+    return Promise.resolve();
   }
 
-  public findActiveSession(tokenHash: string, now: number): SessionRecord | undefined {
-    return this.snapshot.sessions.find(
-      (session) => session.tokenHash === tokenHash && session.expiresAt > now
+  public findActiveSession(tokenHash: string, now: number): Promise<SessionRecord | undefined> {
+    return Promise.resolve(
+      this.snapshot.sessions.find(
+        (session) => session.tokenHash === tokenHash && session.expiresAt > now
+      )
     );
   }
 
-  public revokeUserSessions(userId: string): void {
+  public revokeUserSessions(userId: string): Promise<void> {
     this.snapshot = {
       ...this.snapshot,
       sessions: this.snapshot.sessions.filter((session) => session.userId !== userId)
     };
+    return Promise.resolve();
   }
 
-  public purgeExpiredSessions(now: number): void {
+  public purgeExpiredSessions(now: number): Promise<void> {
     this.snapshot = {
       ...this.snapshot,
       sessions: this.snapshot.sessions.filter(({ expiresAt }) => expiresAt > now)
     };
+    return Promise.resolve();
   }
 
-  public purgeExpiredIdempotencyResults(now: number): void {
+  public purgeExpiredIdempotencyResults(now: number): Promise<void> {
     this.snapshot = {
       ...this.snapshot,
       idempotency: this.snapshot.idempotency.filter(({ expiresAt }) => expiresAt > now)
     };
+    return Promise.resolve();
   }
 
-  public tasksForUser(userId: string, status?: Task['status']): readonly Task[] {
-    return this.snapshot.tasks.filter(
-      (task) => task.userId === userId && (status === undefined || task.status === status)
+  public tasksForUser(userId: string, status?: Task['status']): Promise<readonly Task[]> {
+    return Promise.resolve(
+      this.snapshot.tasks.filter(
+        (task) => task.userId === userId && (status === undefined || task.status === status)
+      )
     );
   }
 
-  public allTasks(): readonly Task[] {
-    return this.snapshot.tasks;
+  public allTasks(): Promise<readonly Task[]> {
+    return Promise.resolve(this.snapshot.tasks);
   }
 
-  public findTask(userId: string, taskId: string): Task | undefined {
-    return this.snapshot.tasks.find((task) => task.userId === userId && task.id === taskId);
+  public findTask(userId: string, taskId: string): Promise<Task | undefined> {
+    return Promise.resolve(
+      this.snapshot.tasks.find((task) => task.userId === userId && task.id === taskId)
+    );
   }
 
-  public saveTask(task: Task): void {
+  public saveTask(task: Task): Promise<void> {
     this.snapshot = {
       ...this.snapshot,
       tasks: upsertByUserAndId(this.snapshot.tasks, task)
     };
+    return Promise.resolve();
   }
 
-  public deleteTask(userId: string, taskId: string): void {
+  public deleteTask(userId: string, taskId: string): Promise<void> {
     this.snapshot = {
       ...this.snapshot,
       tasks: this.snapshot.tasks.filter((task) => task.userId !== userId || task.id !== taskId)
     };
+    return Promise.resolve();
   }
 
-  public listsForUser(userId: string): readonly TodoList[] {
-    return this.snapshot.lists.filter((list) => list.userId === userId);
+  public listsForUser(userId: string): Promise<readonly TodoList[]> {
+    return Promise.resolve(this.snapshot.lists.filter((list) => list.userId === userId));
   }
 
-  public findList(userId: string, listId: string): TodoList | undefined {
-    return this.snapshot.lists.find((list) => list.userId === userId && list.id === listId);
+  public findList(userId: string, listId: string): Promise<TodoList | undefined> {
+    return Promise.resolve(
+      this.snapshot.lists.find((list) => list.userId === userId && list.id === listId)
+    );
   }
 
-  public saveList(list: TodoList): void {
+  public saveList(list: TodoList): Promise<void> {
     this.snapshot = {
       ...this.snapshot,
       lists: upsertByUserAndId(this.snapshot.lists, list)
     };
+    return Promise.resolve();
   }
 
-  public deleteList(userId: string, listId: string): void {
+  public deleteList(userId: string, listId: string): Promise<void> {
     this.snapshot = {
       ...this.snapshot,
       lists: this.snapshot.lists.filter((list) => list.userId !== userId || list.id !== listId),
@@ -176,24 +196,28 @@ export class MemoryDatabase implements BackendDatabase {
           : task
       )
     };
+    return Promise.resolve();
   }
 
-  public tagsForUser(userId: string): readonly TodoTag[] {
-    return this.snapshot.tags.filter((tag) => tag.userId === userId);
+  public tagsForUser(userId: string): Promise<readonly TodoTag[]> {
+    return Promise.resolve(this.snapshot.tags.filter((tag) => tag.userId === userId));
   }
 
-  public findTag(userId: string, tagId: string): TodoTag | undefined {
-    return this.snapshot.tags.find((tag) => tag.userId === userId && tag.id === tagId);
+  public findTag(userId: string, tagId: string): Promise<TodoTag | undefined> {
+    return Promise.resolve(
+      this.snapshot.tags.find((tag) => tag.userId === userId && tag.id === tagId)
+    );
   }
 
-  public saveTag(tag: TodoTag): void {
+  public saveTag(tag: TodoTag): Promise<void> {
     this.snapshot = {
       ...this.snapshot,
       tags: upsertByUserAndId(this.snapshot.tags, tag)
     };
+    return Promise.resolve();
   }
 
-  public deleteTag(userId: string, tagId: string): void {
+  public deleteTag(userId: string, tagId: string): Promise<void> {
     this.snapshot = {
       ...this.snapshot,
       tags: this.snapshot.tags.filter((tag) => tag.userId !== userId || tag.id !== tagId),
@@ -207,46 +231,56 @@ export class MemoryDatabase implements BackendDatabase {
           : task
       )
     };
+    return Promise.resolve();
   }
 
-  public seriesForUser(userId?: string): readonly SeriesRecord[] {
-    return userId === undefined
-      ? this.snapshot.series
-      : this.snapshot.series.filter((series) => series.userId === userId);
+  public seriesForUser(userId?: string): Promise<readonly SeriesRecord[]> {
+    return Promise.resolve(
+      userId === undefined
+        ? this.snapshot.series
+        : this.snapshot.series.filter((series) => series.userId === userId)
+    );
   }
 
-  public saveSeries(series: SeriesRecord): void {
+  public saveSeries(series: SeriesRecord): Promise<void> {
     this.snapshot = {
       ...this.snapshot,
       series: upsertByUserAndId(this.snapshot.series, series)
     };
+    return Promise.resolve();
   }
 
-  public remindersDueAtOrBefore(now: number): readonly ReminderRecord[] {
-    return this.snapshot.reminders.filter(
-      (reminder) => reminder.state === 'SCHEDULED' && reminder.fireAt <= now
+  public remindersDueAtOrBefore(now: number): Promise<readonly ReminderRecord[]> {
+    return Promise.resolve(
+      this.snapshot.reminders.filter(
+        (reminder) => reminder.state === 'SCHEDULED' && reminder.fireAt <= now
+      )
     );
   }
 
-  public findRemindersForTask(userId: string, taskId: string): readonly ReminderRecord[] {
-    return this.snapshot.reminders.filter(
-      (reminder) => reminder.userId === userId && reminder.taskId === taskId
+  public findRemindersForTask(userId: string, taskId: string): Promise<readonly ReminderRecord[]> {
+    return Promise.resolve(
+      this.snapshot.reminders.filter(
+        (reminder) => reminder.userId === userId && reminder.taskId === taskId
+      )
     );
   }
 
-  public saveReminder(reminder: ReminderRecord): void {
+  public saveReminder(reminder: ReminderRecord): Promise<void> {
     this.snapshot = {
       ...this.snapshot,
       reminders: upsertByUserAndId(this.snapshot.reminders, reminder)
     };
+    return Promise.resolve();
   }
 
-  public reminderGrantFor(userId: string): number {
-    return this.snapshot.reminderGrants[userId] ?? 0;
+  public reminderGrantFor(userId: string): Promise<number> {
+    return Promise.resolve(this.snapshot.reminderGrants[userId] ?? 0);
   }
 
-  public addReminderGrant(userId: string, maximum: number): number {
-    const available = Math.min(this.reminderGrantFor(userId) + 1, maximum);
+  public async addReminderGrant(userId: string, maximum: number): Promise<number> {
+    const current = await this.reminderGrantFor(userId);
+    const available = Math.min(current + 1, maximum);
     this.snapshot = {
       ...this.snapshot,
       reminderGrants: {
@@ -257,8 +291,8 @@ export class MemoryDatabase implements BackendDatabase {
     return available;
   }
 
-  public consumeReminderGrant(userId: string): boolean {
-    const current = this.reminderGrantFor(userId);
+  public async consumeReminderGrant(userId: string): Promise<boolean> {
+    const current = await this.reminderGrantFor(userId);
     if (current < 1) {
       return false;
     }
@@ -276,10 +310,12 @@ export class MemoryDatabase implements BackendDatabase {
     userId: string,
     scope: string,
     now: number
-  ): HttpResult<ApiData> | undefined {
-    return this.snapshot.idempotency.find(
-      ({ key, expiresAt }) => key === `${userId}:${scope}` && expiresAt > now
-    )?.result;
+  ): Promise<HttpResult<ApiData> | undefined> {
+    return Promise.resolve(
+      this.snapshot.idempotency.find(
+        ({ key, expiresAt }) => key === `${userId}:${scope}` && expiresAt > now
+      )?.result
+    );
   }
 
   public saveIdempotentResult(
@@ -287,7 +323,7 @@ export class MemoryDatabase implements BackendDatabase {
     scope: string,
     result: HttpResult<ApiData>,
     expiresAt: number
-  ): void {
+  ): Promise<void> {
     const key = `${userId}:${scope}`;
     this.snapshot = {
       ...this.snapshot,
@@ -300,9 +336,10 @@ export class MemoryDatabase implements BackendDatabase {
         }
       ]
     };
+    return Promise.resolve();
   }
 
-  public purgeUser(userId: string): void {
+  public purgeUser(userId: string): Promise<void> {
     this.snapshot = {
       ...this.snapshot,
       users: this.snapshot.users.map((user) =>
@@ -324,14 +361,17 @@ export class MemoryDatabase implements BackendDatabase {
         Object.entries(this.snapshot.reminderGrants).filter(([id]) => id !== userId)
       )
     };
+    return Promise.resolve();
   }
 
-  public usersPendingPurge(now: number): readonly UserRecord[] {
-    return this.snapshot.users.filter(
-      (user) =>
-        user.status === 'DELETION_PENDING' &&
-        user.purgeAfterAt !== undefined &&
-        user.purgeAfterAt <= now
+  public usersPendingPurge(now: number): Promise<readonly UserRecord[]> {
+    return Promise.resolve(
+      this.snapshot.users.filter(
+        (user) =>
+          user.status === 'DELETION_PENDING' &&
+          user.purgeAfterAt !== undefined &&
+          user.purgeAfterAt <= now
+      )
     );
   }
 }

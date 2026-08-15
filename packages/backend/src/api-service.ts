@@ -233,7 +233,7 @@ export class ApiService {
       const effectiveRequest: HttpRequest =
         method === request.method ? request : { ...request, method };
 
-      const user = this.authenticate(request.token);
+      const user = await this.authenticate(request.token);
       if (user === undefined) {
         return asApiData(failure(401, 'AUTH_REQUIRED', '登录状态已失效，请重新登录'));
       }
@@ -244,15 +244,19 @@ export class ApiService {
           return asApiData(failure(400, 'REQUEST_ID_REQUIRED', '写操作必须提供请求标识'));
         }
         idempotencyScope = `${method}:${request.path}:${request.requestId}`;
-        const existing = this.database.findIdempotentResult(user.id, idempotencyScope, this.now());
+        const existing = await this.database.findIdempotentResult(
+          user.id,
+          idempotencyScope,
+          this.now()
+        );
         if (existing !== undefined) {
           return existing;
         }
       }
 
-      const result = this.routeAuthenticated(user, effectiveRequest);
+      const result = await this.routeAuthenticated(user, effectiveRequest);
       if (idempotencyScope !== undefined && result.status >= 200 && result.status < 400) {
-        this.database.saveIdempotentResult(
+        await this.database.saveIdempotentResult(
           user.id,
           idempotencyScope,
           result,
@@ -269,11 +273,11 @@ export class ApiService {
     const input = z.object({ code: z.string().min(1) }).parse(body);
     const openId = await this.exchangeLoginCode(input.code);
     const now = this.now();
-    const existing = this.database.findUserByOpenId(openId);
+    const existing = await this.database.findUserByOpenId(openId);
     const user =
       existing ??
       ({
-        id: this.database.nextId('user'),
+        id: await this.database.nextId('user'),
         openId,
         status: 'ACTIVE',
         createdAt: now,
@@ -281,8 +285,8 @@ export class ApiService {
       } satisfies UserRecord);
 
     if (existing === undefined) {
-      this.database.saveUser(user);
-      this.database.saveList({
+      await this.database.saveUser(user);
+      await this.database.saveList({
         id: INBOX_LIST_ID,
         userId: user.id,
         name: '收件箱',
@@ -296,7 +300,7 @@ export class ApiService {
     }
 
     const token = randomBytes(32).toString('base64url');
-    this.database.saveSession({
+    await this.database.saveSession({
       tokenHash: tokenHash(token),
       userId: user.id,
       expiresAt: now + SESSION_LIFETIME_MS,
@@ -305,36 +309,39 @@ export class ApiService {
     return success(200, { token, userId: user.id });
   }
 
-  private authenticate(token: string | undefined): UserRecord | undefined {
+  private async authenticate(token: string | undefined): Promise<UserRecord | undefined> {
     if (token === undefined) {
       return undefined;
     }
-    const session = this.database.findActiveSession(tokenHash(token), this.now());
+    const session = await this.database.findActiveSession(tokenHash(token), this.now());
     if (session === undefined) {
       return undefined;
     }
-    const user = this.database.findUserById(session.userId);
+    const user = await this.database.findUserById(session.userId);
     return user?.status === 'ACTIVE' ? user : undefined;
   }
 
-  private routeAuthenticated(user: UserRecord, request: HttpRequest): HttpResult<ApiData> {
+  private async routeAuthenticated(
+    user: UserRecord,
+    request: HttpRequest
+  ): Promise<HttpResult<ApiData>> {
     if (request.method === 'GET' && request.path === '/v1/tasks') {
       return this.listTasks(user, request.query);
     }
     if (request.method === 'GET' && request.path === '/v1/trash') {
-      return success(200, sortTasks(this.database.tasksForUser(user.id, 'TRASHED')));
+      return success(200, sortTasks(await this.database.tasksForUser(user.id, 'TRASHED')));
     }
     if (request.method === 'POST' && request.path === '/v1/tasks') {
       return this.createTask(user, request.body);
     }
     if (request.method === 'GET' && request.path === '/v1/lists') {
-      return success(200, this.database.listsForUser(user.id));
+      return success(200, await this.database.listsForUser(user.id));
     }
     if (request.method === 'POST' && request.path === '/v1/lists') {
       return this.createList(user, request.body);
     }
     if (request.method === 'GET' && request.path === '/v1/tags') {
-      return success(200, this.database.tagsForUser(user.id));
+      return success(200, await this.database.tagsForUser(user.id));
     }
     if (request.method === 'POST' && request.path === '/v1/tags') {
       return this.createTag(user, request.body);
@@ -342,8 +349,8 @@ export class ApiService {
     if (request.method === 'POST' && request.path === '/v1/reminder-grants') {
       const input = z.object({ accepted: z.boolean() }).parse(request.body);
       const available = input.accepted
-        ? this.database.addReminderGrant(user.id, MAX_REMINDER_GRANTS)
-        : this.database.reminderGrantFor(user.id);
+        ? await this.database.addReminderGrant(user.id, MAX_REMINDER_GRANTS)
+        : await this.database.reminderGrantFor(user.id);
       return success(200, { userId: user.id, available });
     }
     if (request.method === 'POST' && request.path === '/v1/account/deletion') {
@@ -386,7 +393,7 @@ export class ApiService {
     return asApiData(failure(404, 'ROUTE_NOT_FOUND', '请求的接口不存在'));
   }
 
-  private createTask(user: UserRecord, body: unknown): HttpResult<Task> {
+  private async createTask(user: UserRecord, body: unknown): Promise<HttpResult<Task>> {
     const input = createTaskSchema.parse(body);
     const validation = validateTaskInput(input);
     if (!validation.valid) {
@@ -394,11 +401,13 @@ export class ApiService {
     }
 
     const listId = input.listId ?? INBOX_LIST_ID;
-    if (this.database.findList(user.id, listId) === undefined) {
+    if ((await this.database.findList(user.id, listId)) === undefined) {
       return failure(400, 'LIST_NOT_FOUND', '所选清单不存在');
     }
-    if (input.tagIds.some((tagId) => this.database.findTag(user.id, tagId) === undefined)) {
-      return failure(400, 'TAG_NOT_FOUND', '所选标签不存在');
+    for (const tagId of input.tagIds) {
+      if ((await this.database.findTag(user.id, tagId)) === undefined) {
+        return failure(400, 'TAG_NOT_FOUND', '所选标签不存在');
+      }
     }
 
     const now = this.now();
@@ -407,7 +416,7 @@ export class ApiService {
     }
 
     const task = this.newTask({
-      id: this.database.nextId('task'),
+      id: await this.database.nextId('task'),
       userId: user.id,
       input,
       listId,
@@ -415,27 +424,27 @@ export class ApiService {
     });
     const reminder =
       input.reminderEnabled === true
-        ? createReminderForTask(task, now, this.database.nextId('reminder'))
+        ? createReminderForTask(task, now, await this.database.nextId('reminder'))
         : undefined;
     const savedTask: Task = reminder === undefined ? task : { ...task, remindAt: reminder.fireAt };
-    this.database.saveTask(savedTask);
+    await this.database.saveTask(savedTask);
     if (reminder !== undefined) {
-      this.database.saveReminder({ ...reminder, title: task.title });
+      await this.database.saveReminder({ ...reminder, title: task.title });
     }
     return success(201, savedTask);
   }
 
-  private createRecurringTask(
+  private async createRecurringTask(
     user: UserRecord,
     input: z.infer<typeof createTaskSchema>,
     now: number,
     listId: string
-  ): HttpResult<Task> {
+  ): Promise<HttpResult<Task>> {
     const recurrence = input.recurrence;
     if (recurrence === undefined) {
       throw new DomainError('RECURRENCE_INVALID_DATE');
     }
-    const seriesId = this.database.nextId('series');
+    const seriesId = await this.database.nextId('series');
     const template: TaskTemplate = {
       title: input.title,
       priority: input.priority,
@@ -455,10 +464,10 @@ export class ApiService {
       createdAt: now,
       updatedAt: now
     };
-    this.database.saveSeries(series);
+    await this.database.saveSeries(series);
     const task = this.taskFromSeries(series, recurrence.startDate, now);
-    this.database.saveTask(task);
-    this.database.saveSeries({
+    await this.database.saveTask(task);
+    await this.database.saveSeries({
       ...series,
       materializedThrough: recurrence.startDate
     });
@@ -511,31 +520,35 @@ export class ApiService {
     };
   }
 
-  private getTask(user: UserRecord, taskId: string): HttpResult<Task> {
-    const task = this.database.findTask(user.id, taskId);
+  private async getTask(user: UserRecord, taskId: string): Promise<HttpResult<Task>> {
+    const task = await this.database.findTask(user.id, taskId);
     return task === undefined
       ? failure(404, 'TASK_NOT_FOUND', '待办不存在或已删除')
       : success(200, task);
   }
 
-  private updateTaskState(
+  private async updateTaskState(
     user: UserRecord,
     taskId: string,
     action: 'complete' | 'uncomplete'
-  ): HttpResult<Task> {
-    const task = this.database.findTask(user.id, taskId);
+  ): Promise<HttpResult<Task>> {
+    const task = await this.database.findTask(user.id, taskId);
     if (task === undefined) {
       return failure(404, 'TASK_NOT_FOUND', '待办不存在或已删除');
     }
     const updated =
       action === 'complete' ? completeTask(task, this.now()) : uncompleteTask(task, this.now());
-    this.database.saveTask(updated);
+    await this.database.saveTask(updated);
     return success(200, updated);
   }
 
-  private updateTask(user: UserRecord, taskId: string, body: unknown): HttpResult<Task> {
+  private async updateTask(
+    user: UserRecord,
+    taskId: string,
+    body: unknown
+  ): Promise<HttpResult<Task>> {
     const input = updateTaskSchema.parse(body);
-    const existing = this.database.findTask(user.id, taskId);
+    const existing = await this.database.findTask(user.id, taskId);
     if (existing === undefined) {
       return failure(404, 'TASK_NOT_FOUND', '待办不存在或已删除');
     }
@@ -544,12 +557,14 @@ export class ApiService {
     }
 
     const listId = input.listId ?? existing.listId;
-    if (this.database.findList(user.id, listId) === undefined) {
+    if ((await this.database.findList(user.id, listId)) === undefined) {
       return failure(400, 'LIST_NOT_FOUND', '所选清单不存在');
     }
     const tagIds = input.tagIds ?? existing.tagIds;
-    if (tagIds.some((tagId) => this.database.findTag(user.id, tagId) === undefined)) {
-      return failure(400, 'TAG_NOT_FOUND', '所选标签不存在');
+    for (const tagId of tagIds) {
+      if ((await this.database.findTag(user.id, tagId)) === undefined) {
+        return failure(400, 'TAG_NOT_FOUND', '所选标签不存在');
+      }
     }
 
     const now = this.now();
@@ -571,22 +586,23 @@ export class ApiService {
       return failure(400, validation.issues[0]?.code ?? 'TASK_INVALID', '待办信息不完整');
     }
 
-    const sync = this.syncReminder(
+    const reminders = await this.database.findRemindersForTask(user.id, taskId);
+    const sync = await this.syncReminder(
       existing,
       updated,
-      this.database
-        .findRemindersForTask(user.id, taskId)
-        .find((candidate) => candidate.state === 'SCHEDULED' || candidate.state === 'SKIPPED'),
+      reminders.find(
+        (candidate) => candidate.state === 'SCHEDULED' || candidate.state === 'SKIPPED'
+      ),
       input.reminderEnabled,
       now
     );
     let savedTask: Task;
     if (sync.kind === 'active') {
-      this.database.saveReminder(sync.reminder);
+      await this.database.saveReminder(sync.reminder);
       savedTask = { ...updated, remindAt: sync.reminder.fireAt };
     } else if (sync.kind === 'disabled') {
       if (sync.reminder !== null) {
-        this.database.saveReminder(sync.reminder);
+        await this.database.saveReminder(sync.reminder);
       }
       const withoutReminder = { ...updated };
       delete withoutReminder.remindAt;
@@ -594,17 +610,17 @@ export class ApiService {
     } else {
       savedTask = updated;
     }
-    this.database.saveTask(savedTask);
+    await this.database.saveTask(savedTask);
     return success(200, savedTask);
   }
 
-  private syncReminder(
+  private async syncReminder(
     original: Task,
     updated: Task,
     existing: ReminderRecord | undefined,
     reminderEnabled: boolean | undefined,
     now: number
-  ): ReminderSyncResult {
+  ): Promise<ReminderSyncResult> {
     if (reminderEnabled === true) {
       if (!updated.dueHasTime || updated.dueAt === undefined) {
         throw new DomainError('REMINDER_REQUIRES_DUE_TIME');
@@ -619,7 +635,7 @@ export class ApiService {
       return {
         kind: 'active',
         reminder: {
-          ...createReminderForTask(updated, now, this.database.nextId('reminder')),
+          ...createReminderForTask(updated, now, await this.database.nextId('reminder')),
           title: updated.title
         }
       };
@@ -643,11 +659,14 @@ export class ApiService {
       : { kind: 'disabled', reminder: null };
   }
 
-  private listTasks(user: UserRecord, query: HttpRequest['query']): HttpResult<readonly Task[]> {
+  private async listTasks(
+    user: UserRecord,
+    query: HttpRequest['query']
+  ): Promise<HttpResult<readonly Task[]>> {
     const limit = parseLimit(query?.limit);
     const cursor = decodeCursor(query?.cursor);
     const tasks = sortTasks(
-      this.database.tasksForUser(user.id).filter((task) => task.status !== 'TRASHED')
+      (await this.database.tasksForUser(user.id)).filter((task) => task.status !== 'TRASHED')
     );
     const startIndex =
       cursor === undefined
@@ -663,40 +682,41 @@ export class ApiService {
     return success(200, page, meta);
   }
 
-  private trashTask(user: UserRecord, taskId: string): HttpResult<Task> {
-    const task = this.database.findTask(user.id, taskId);
+  private async trashTask(user: UserRecord, taskId: string): Promise<HttpResult<Task>> {
+    const task = await this.database.findTask(user.id, taskId);
     if (task === undefined) {
       return failure(404, 'TASK_NOT_FOUND', '待办不存在或已删除');
     }
     const updated = trashTask(task, this.now());
-    this.database.saveTask(updated);
-    for (const reminder of this.database.findRemindersForTask(user.id, taskId)) {
+    await this.database.saveTask(updated);
+    for (const reminder of await this.database.findRemindersForTask(user.id, taskId)) {
       if (reminder.state === 'SCHEDULED') {
-        this.database.saveReminder({ ...cancelReminder(reminder), title: reminder.title });
+        await this.database.saveReminder({ ...cancelReminder(reminder), title: reminder.title });
       }
     }
     return success(200, updated);
   }
 
-  private restoreTask(user: UserRecord, taskId: string): HttpResult<Task> {
-    const task = this.database.findTask(user.id, taskId);
+  private async restoreTask(user: UserRecord, taskId: string): Promise<HttpResult<Task>> {
+    const task = await this.database.findTask(user.id, taskId);
     if (task === undefined || task.status !== 'TRASHED') {
       return failure(404, 'TASK_NOT_FOUND', '回收站中不存在该待办');
     }
     const listId =
-      this.database.findList(user.id, task.listId) === undefined ? INBOX_LIST_ID : task.listId;
+      (await this.database.findList(user.id, task.listId)) === undefined
+        ? INBOX_LIST_ID
+        : task.listId;
     const now = this.now();
     const restored = {
       ...restoreTask(task, now),
       listId
     };
-    this.database.saveTask(restored);
-    const reminder = this.database
-      .findRemindersForTask(user.id, taskId)
-      .find((candidate) => candidate.state === 'SKIPPED');
+    await this.database.saveTask(restored);
+    const reminders = await this.database.findRemindersForTask(user.id, taskId);
+    const reminder = reminders.find((candidate) => candidate.state === 'SKIPPED');
     if (reminder !== undefined) {
       try {
-        this.database.saveReminder({
+        await this.database.saveReminder({
           ...reactivateReminder(reminder, now),
           title: reminder.title,
           taskVersion: restored.version
@@ -710,41 +730,41 @@ export class ApiService {
     return success(200, restored);
   }
 
-  private createList(user: UserRecord, body: unknown): HttpResult<TodoList> {
+  private async createList(user: UserRecord, body: unknown): Promise<HttpResult<TodoList>> {
     const input = z.object({ name: z.string() }).parse(body);
     const validation = validateListName(input.name);
     if (!validation.valid) {
       return failure(400, validation.issues[0]?.code ?? 'LIST_INVALID', '清单名称无效');
     }
-    if (this.database.listsForUser(user.id).length >= 50) {
+    if ((await this.database.listsForUser(user.id)).length >= 50) {
       return failure(409, 'LIST_LIMIT_REACHED', '最多只能创建 50 个清单');
     }
     const now = this.now();
     const list: TodoList = {
-      id: this.database.nextId('list'),
+      id: await this.database.nextId('list'),
       userId: user.id,
       name: input.name,
       isInbox: false,
       createdAt: now,
       updatedAt: now
     };
-    this.database.saveList(list);
+    await this.database.saveList(list);
     return success(201, list);
   }
 
-  private deleteList(user: UserRecord, listId: string): HttpResult<null> {
-    const list = this.database.findList(user.id, listId);
+  private async deleteList(user: UserRecord, listId: string): Promise<HttpResult<null>> {
+    const list = await this.database.findList(user.id, listId);
     if (list === undefined) {
       return failure(404, 'LIST_NOT_FOUND', '清单不存在');
     }
     if (list.isInbox) {
       return failure(409, 'INBOX_IMMUTABLE', '收件箱不能删除');
     }
-    this.database.deleteList(user.id, listId);
+    await this.database.deleteList(user.id, listId);
     return success(204, null);
   }
 
-  private createTag(user: UserRecord, body: unknown): HttpResult<TodoTag> {
+  private async createTag(user: UserRecord, body: unknown): Promise<HttpResult<TodoTag>> {
     const input = z
       .object({
         name: z.string(),
@@ -755,41 +775,43 @@ export class ApiService {
     if (!validation.valid) {
       return failure(400, validation.issues[0]?.code ?? 'TAG_INVALID', '标签名称无效');
     }
-    if (this.database.tagsForUser(user.id).length >= 100) {
+    if ((await this.database.tagsForUser(user.id)).length >= 100) {
       return failure(409, 'TAG_LIMIT_REACHED', '最多只能创建 100 个标签');
     }
     const now = this.now();
     const tag: TodoTag = {
-      id: this.database.nextId('tag'),
+      id: await this.database.nextId('tag'),
       userId: user.id,
       name: input.name,
       color: input.color,
       createdAt: now,
       updatedAt: now
     };
-    this.database.saveTag(tag);
+    await this.database.saveTag(tag);
     return success(201, tag);
   }
 
-  private deleteTag(user: UserRecord, tagId: string): HttpResult<null> {
-    if (this.database.findTag(user.id, tagId) === undefined) {
+  private async deleteTag(user: UserRecord, tagId: string): Promise<HttpResult<null>> {
+    if ((await this.database.findTag(user.id, tagId)) === undefined) {
       return failure(404, 'TAG_NOT_FOUND', '标签不存在');
     }
-    this.database.deleteTag(user.id, tagId);
+    await this.database.deleteTag(user.id, tagId);
     return success(204, null);
   }
 
-  private startAccountDeletion(user: UserRecord): HttpResult<{ readonly purgeAfterAt: number }> {
+  private async startAccountDeletion(
+    user: UserRecord
+  ): Promise<HttpResult<{ readonly purgeAfterAt: number }>> {
     const now = this.now();
     const purgeAfterAt = now + ACCOUNT_PURGE_DELAY_MS;
-    this.database.saveUser({
+    await this.database.saveUser({
       ...user,
       status: 'DELETION_PENDING',
       deletionRequestedAt: now,
       purgeAfterAt,
       updatedAt: now
     });
-    this.database.revokeUserSessions(user.id);
+    await this.database.revokeUserSessions(user.id);
     return success(202, { purgeAfterAt });
   }
 
