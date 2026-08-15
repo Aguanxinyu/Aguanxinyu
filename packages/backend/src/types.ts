@@ -7,9 +7,15 @@ export type HttpMethod = 'DELETE' | 'GET' | 'PATCH' | 'POST';
 export interface HttpRequest {
   readonly method: HttpMethod;
   readonly path: string;
+  readonly query?: Readonly<Record<string, string>>;
   readonly token?: string;
   readonly requestId?: string;
   readonly body?: unknown;
+  /**
+   * Effective method when the transport cannot send it natively (wx.request has no PATCH).
+   * Populated from the X-HTTP-Method-Override header.
+   */
+  readonly methodOverride?: 'PATCH';
 }
 
 export interface HttpResult<T> {

@@ -33,27 +33,31 @@ export function getTaskGroup(task: Task, now: number): TaskGroup | null {
   return 'UPCOMING';
 }
 
+// MAX_SAFE 取代 Infinity，使排序键可被 JSON 安全编码（用于游标分页）。
+const UNDATED_SORT_KEY = Number.MAX_SAFE_INTEGER;
+
+export type TaskSortTuple = readonly [number, number, number, string];
+
+export function taskSortTuple(task: Task): TaskSortTuple {
+  return [task.dueAt ?? UNDATED_SORT_KEY, PRIORITY_ORDER[task.priority], -task.createdAt, task.id];
+}
+
+export function compareSortTuples(left: TaskSortTuple, right: TaskSortTuple): number {
+  for (let index = 0; index < 3; index += 1) {
+    const l = left[index] as number;
+    const r = right[index] as number;
+    if (l !== r) {
+      return l < r ? -1 : 1;
+    }
+  }
+  if (left[3] !== right[3]) {
+    return left[3] < right[3] ? -1 : 1;
+  }
+  return 0;
+}
+
 export function sortTasks(tasks: readonly Task[]): readonly Task[] {
-  return [...tasks].sort((left, right) => {
-    const dueDifference =
-      (left.dueAt ?? Number.POSITIVE_INFINITY) - (right.dueAt ?? Number.POSITIVE_INFINITY);
-    if (dueDifference !== 0) {
-      return dueDifference;
-    }
-
-    const priorityDifference = PRIORITY_ORDER[left.priority] - PRIORITY_ORDER[right.priority];
-    if (priorityDifference !== 0) {
-      return priorityDifference;
-    }
-
-    const creationDifference = right.createdAt - left.createdAt;
-    if (creationDifference !== 0) {
-      return creationDifference;
-    }
-
-    if (left.id === right.id) {
-      return 0;
-    }
-    return left.id < right.id ? -1 : 1;
-  });
+  return [...tasks].sort((left, right) =>
+    compareSortTuples(taskSortTuple(left), taskSortTuple(right))
+  );
 }

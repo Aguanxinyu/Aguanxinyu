@@ -1,6 +1,7 @@
 import type { Task } from '@today-todo/contracts';
 
 import { ApiService } from './api-service.js';
+import type { BackendDatabase } from './database.js';
 import { MemoryDatabase } from './memory-database.js';
 import { Schedulers } from './schedulers.js';
 import type {
@@ -82,6 +83,7 @@ export interface LoginResult {
 export class TestSystem {
   private readonly api: ApiService;
   private readonly schedulers: Schedulers;
+  private readonly storage: BackendDatabase;
   private currentTime: number;
   private messages: readonly SentMessage[] = [];
   private errors: readonly string[] = [];
@@ -89,6 +91,7 @@ export class TestSystem {
   public constructor(options: TestSystemOptions) {
     this.currentTime = options.now;
     const database = new MemoryDatabase();
+    this.storage = database;
     this.api = new ApiService({
       database,
       now: () => this.currentTime,
@@ -114,6 +117,10 @@ export class TestSystem {
 
   public get sentMessages(): readonly SentMessage[] {
     return this.messages;
+  }
+
+  public get database(): BackendDatabase {
+    return this.storage;
   }
 
   public get schedulerErrors(): readonly string[] {

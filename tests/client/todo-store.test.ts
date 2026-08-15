@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   acknowledgeMutation,
+  appendTasks,
   createTodoState,
   enqueueMutation,
   replaceTasks,
@@ -22,18 +23,36 @@ describe('mini program todo store', () => {
     updatedAt: 1
   };
 
-  it('replaces tasks without mutating the prior state', () => {
+  it('replaces tasks and resets the pagination cursor without mutating the prior state', () => {
     const original = createTodoState();
-    const next = replaceTasks(original, [task], 10);
+    const seeded = appendTasks(original, [task], 'cursor-1', true);
+    const next = replaceTasks(seeded, [task], 10, null, false);
 
-    expect(next).not.toBe(original);
+    expect(next).not.toBe(seeded);
     expect(next.tasks).toEqual([task]);
     expect(next.syncedAt).toBe(10);
-    expect(original.tasks).toEqual([]);
+    expect(next.nextCursor).toBeNull();
+    expect(next.hasMore).toBe(false);
+    expect(seeded.tasks).toEqual([task]);
+    expect(seeded.nextCursor).toBe('cursor-1');
+  });
+
+  it('appends a page of tasks and flips hasMore without mutating the prior state', () => {
+    const first = { ...task, id: 'task-1' };
+    const second = { ...task, id: 'task-2' };
+    const initial = replaceTasks(createTodoState(), [first], 10, 'cursor-1', true);
+    const next = appendTasks(initial, [second], null, false);
+
+    expect(next).not.toBe(initial);
+    expect(next.tasks.map(({ id }) => id)).toEqual(['task-1', 'task-2']);
+    expect(next.nextCursor).toBeNull();
+    expect(next.hasMore).toBe(false);
+    expect(initial.tasks.map(({ id }) => id)).toEqual(['task-1']);
+    expect(initial.hasMore).toBe(true);
   });
 
   it('applies and rolls back an optimistic status update', () => {
-    const original = replaceTasks(createTodoState(), [task], 10);
+    const original = replaceTasks(createTodoState(), [task], 10, null, false);
     const completed = setTaskStatus(original, task.id, 'DONE', 20);
     const rolledBack = setTaskStatus(completed, task.id, 'TODO', 30);
 

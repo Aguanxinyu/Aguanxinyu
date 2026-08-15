@@ -1,18 +1,24 @@
 import { createHash, randomBytes } from 'node:crypto';
 
-import type { RecurrenceRule, Task } from '@today-todo/contracts';
+import type { ApiMeta, RecurrenceRule, Task } from '@today-todo/contracts';
 import {
+  cancelReminder,
+  compareSortTuples,
   completeTask,
   createReminderForTask,
   DomainError,
   occurrenceKey,
+  reactivateReminder,
+  reminderTimeFor,
   restoreTask,
   sortTasks,
+  taskSortTuple,
   trashTask,
   uncompleteTask,
   validateListName,
   validateTagName,
-  validateTaskInput
+  validateTaskInput,
+  type TaskSortTuple
 } from '@today-todo/domain';
 import { z, ZodError } from 'zod';
 
@@ -23,6 +29,7 @@ import type {
   AuthData,
   HttpRequest,
   HttpResult,
+  ReminderRecord,
   SeriesRecord,
   TaskTemplate,
   TodoList,
@@ -84,14 +91,72 @@ const createTaskSchema = z.object({
   recurrence: recurrenceSchema.optional()
 });
 
-function success<T>(status: number, data: T): HttpResult<T> {
+const updateTaskSchema = z.object({
+  version: z.number().int().positive(),
+  title: z.string().max(100).optional(),
+  notes: z.string().max(1000).optional(),
+  priority: z.enum(['HIGH', 'MEDIUM', 'LOW']).optional(),
+  dueAt: z.number().optional(),
+  dueHasTime: z.boolean().optional(),
+  listId: z.string().optional(),
+  tagIds: z.array(z.string()).max(5).optional(),
+  location: locationSchema.optional(),
+  reminderEnabled: z.boolean().optional()
+});
+
+const DEFAULT_PAGE_SIZE = 50;
+const MAX_PAGE_SIZE = 100;
+
+type ReminderSyncResult =
+  | { readonly kind: 'active'; readonly reminder: ReminderRecord }
+  | { readonly kind: 'disabled'; readonly reminder: ReminderRecord | null }
+  | { readonly kind: 'unchanged' };
+
+function parseLimit(raw: string | undefined): number {
+  if (raw === undefined) {
+    return DEFAULT_PAGE_SIZE;
+  }
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed)) {
+    return DEFAULT_PAGE_SIZE;
+  }
+  return Math.min(Math.max(parsed, 1), MAX_PAGE_SIZE);
+}
+
+function decodeCursor(raw: string | undefined): TaskSortTuple | undefined {
+  if (raw === undefined || raw.length === 0) {
+    return undefined;
+  }
+  try {
+    const parsed: unknown = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8'));
+    if (
+      Array.isArray(parsed) &&
+      parsed.length === 4 &&
+      typeof parsed[0] === 'number' &&
+      typeof parsed[1] === 'number' &&
+      typeof parsed[2] === 'number' &&
+      typeof parsed[3] === 'string'
+    ) {
+      return parsed as unknown as TaskSortTuple;
+    }
+  } catch {
+    return undefined;
+  }
+  return undefined;
+}
+
+function encodeCursor(task: Task): string {
+  return Buffer.from(JSON.stringify(taskSortTuple(task)), 'utf8').toString('base64url');
+}
+
+function success<T>(status: number, data: T, meta: ApiMeta = {}): HttpResult<T> {
   return {
     status,
     body: {
       success: true,
       data,
       error: null,
-      meta: {}
+      meta
     }
   };
 }
@@ -164,24 +229,28 @@ export class ApiService {
         return asApiData(await this.login(request.body));
       }
 
+      const method = request.methodOverride ?? request.method;
+      const effectiveRequest: HttpRequest =
+        method === request.method ? request : { ...request, method };
+
       const user = this.authenticate(request.token);
       if (user === undefined) {
         return asApiData(failure(401, 'AUTH_REQUIRED', '登录状态已失效，请重新登录'));
       }
 
       let idempotencyScope: string | undefined;
-      if (request.method !== 'GET') {
+      if (method !== 'GET') {
         if (request.requestId === undefined || request.requestId.length === 0) {
           return asApiData(failure(400, 'REQUEST_ID_REQUIRED', '写操作必须提供请求标识'));
         }
-        idempotencyScope = `${request.method}:${request.path}:${request.requestId}`;
+        idempotencyScope = `${method}:${request.path}:${request.requestId}`;
         const existing = this.database.findIdempotentResult(user.id, idempotencyScope, this.now());
         if (existing !== undefined) {
           return existing;
         }
       }
 
-      const result = this.routeAuthenticated(user, request);
+      const result = this.routeAuthenticated(user, effectiveRequest);
       if (idempotencyScope !== undefined && result.status >= 200 && result.status < 400) {
         this.database.saveIdempotentResult(
           user.id,
@@ -250,10 +319,7 @@ export class ApiService {
 
   private routeAuthenticated(user: UserRecord, request: HttpRequest): HttpResult<ApiData> {
     if (request.method === 'GET' && request.path === '/v1/tasks') {
-      const tasks = this.database
-        .tasksForUser(user.id)
-        .filter(({ status }) => status !== 'TRASHED');
-      return success(200, sortTasks(tasks));
+      return this.listTasks(user, request.query);
     }
     if (request.method === 'GET' && request.path === '/v1/trash') {
       return success(200, sortTasks(this.database.tasksForUser(user.id, 'TRASHED')));
@@ -309,6 +375,9 @@ export class ApiService {
       if (request.method === 'GET') {
         return this.getTask(user, taskMatch[1]);
       }
+      if (request.method === 'PATCH') {
+        return this.updateTask(user, taskMatch[1], request.body);
+      }
       if (request.method === 'DELETE') {
         return this.trashTask(user, taskMatch[1]);
       }
@@ -348,11 +417,12 @@ export class ApiService {
       input.reminderEnabled === true
         ? createReminderForTask(task, now, this.database.nextId('reminder'))
         : undefined;
-    this.database.saveTask(task);
+    const savedTask: Task = reminder === undefined ? task : { ...task, remindAt: reminder.fireAt };
+    this.database.saveTask(savedTask);
     if (reminder !== undefined) {
       this.database.saveReminder({ ...reminder, title: task.title });
     }
-    return success(201, task);
+    return success(201, savedTask);
   }
 
   private createRecurringTask(
@@ -463,6 +533,136 @@ export class ApiService {
     return success(200, updated);
   }
 
+  private updateTask(user: UserRecord, taskId: string, body: unknown): HttpResult<Task> {
+    const input = updateTaskSchema.parse(body);
+    const existing = this.database.findTask(user.id, taskId);
+    if (existing === undefined) {
+      return failure(404, 'TASK_NOT_FOUND', '待办不存在或已删除');
+    }
+    if (existing.version !== input.version) {
+      return failure(409, 'VERSION_CONFLICT', '任务已被其他操作修改，请刷新后重试');
+    }
+
+    const listId = input.listId ?? existing.listId;
+    if (this.database.findList(user.id, listId) === undefined) {
+      return failure(400, 'LIST_NOT_FOUND', '所选清单不存在');
+    }
+    const tagIds = input.tagIds ?? existing.tagIds;
+    if (tagIds.some((tagId) => this.database.findTag(user.id, tagId) === undefined)) {
+      return failure(400, 'TAG_NOT_FOUND', '所选标签不存在');
+    }
+
+    const now = this.now();
+    const updated: Task = {
+      ...existing,
+      ...(input.title === undefined ? {} : { title: input.title }),
+      ...(input.notes === undefined ? {} : { notes: input.notes }),
+      ...(input.priority === undefined ? {} : { priority: input.priority }),
+      ...(input.dueAt === undefined ? {} : { dueAt: input.dueAt }),
+      ...(input.dueHasTime === undefined ? {} : { dueHasTime: input.dueHasTime }),
+      ...(input.location === undefined ? {} : { location: input.location }),
+      listId,
+      tagIds,
+      version: existing.version + 1,
+      updatedAt: now
+    };
+    const validation = validateTaskInput(updated);
+    if (!validation.valid) {
+      return failure(400, validation.issues[0]?.code ?? 'TASK_INVALID', '待办信息不完整');
+    }
+
+    const sync = this.syncReminder(
+      existing,
+      updated,
+      this.database
+        .findRemindersForTask(user.id, taskId)
+        .find((candidate) => candidate.state === 'SCHEDULED' || candidate.state === 'SKIPPED'),
+      input.reminderEnabled,
+      now
+    );
+    let savedTask: Task;
+    if (sync.kind === 'active') {
+      this.database.saveReminder(sync.reminder);
+      savedTask = { ...updated, remindAt: sync.reminder.fireAt };
+    } else if (sync.kind === 'disabled') {
+      if (sync.reminder !== null) {
+        this.database.saveReminder(sync.reminder);
+      }
+      const withoutReminder = { ...updated };
+      delete withoutReminder.remindAt;
+      savedTask = withoutReminder;
+    } else {
+      savedTask = updated;
+    }
+    this.database.saveTask(savedTask);
+    return success(200, savedTask);
+  }
+
+  private syncReminder(
+    original: Task,
+    updated: Task,
+    existing: ReminderRecord | undefined,
+    reminderEnabled: boolean | undefined,
+    now: number
+  ): ReminderSyncResult {
+    if (reminderEnabled === true) {
+      if (!updated.dueHasTime || updated.dueAt === undefined) {
+        throw new DomainError('REMINDER_REQUIRES_DUE_TIME');
+      }
+      const fireAt = reminderTimeFor(updated.dueAt);
+      if (fireAt <= now) {
+        throw new DomainError('REMINDER_TOO_LATE');
+      }
+      if (existing?.state === 'SCHEDULED') {
+        return { kind: 'active', reminder: { ...existing, fireAt, taskVersion: updated.version } };
+      }
+      return {
+        kind: 'active',
+        reminder: {
+          ...createReminderForTask(updated, now, this.database.nextId('reminder')),
+          title: updated.title
+        }
+      };
+    }
+    if (reminderEnabled === false) {
+      return existing?.state === 'SCHEDULED'
+        ? { kind: 'disabled', reminder: { ...cancelReminder(existing), title: existing.title } }
+        : { kind: 'disabled', reminder: null };
+    }
+    const timeChanged =
+      original.dueAt !== updated.dueAt || original.dueHasTime !== updated.dueHasTime;
+    if (!timeChanged || existing === undefined) {
+      // Benign edit: sync taskVersion so the scheduler does not treat the reminder as stale.
+      if (existing?.state === 'SCHEDULED') {
+        return { kind: 'active', reminder: { ...existing, taskVersion: updated.version } };
+      }
+      return { kind: 'unchanged' };
+    }
+    return existing.state === 'SCHEDULED'
+      ? { kind: 'disabled', reminder: { ...cancelReminder(existing), title: existing.title } }
+      : { kind: 'disabled', reminder: null };
+  }
+
+  private listTasks(user: UserRecord, query: HttpRequest['query']): HttpResult<readonly Task[]> {
+    const limit = parseLimit(query?.limit);
+    const cursor = decodeCursor(query?.cursor);
+    const tasks = sortTasks(
+      this.database.tasksForUser(user.id).filter((task) => task.status !== 'TRASHED')
+    );
+    const startIndex =
+      cursor === undefined
+        ? 0
+        : tasks.findIndex((task) => compareSortTuples(taskSortTuple(task), cursor) === 0);
+    const candidates =
+      cursor === undefined ? tasks : startIndex === -1 ? [] : tasks.slice(startIndex + 1);
+    const page = candidates.slice(0, limit);
+    const hasMore = candidates.length > page.length;
+    const lastTask = page[page.length - 1];
+    const nextCursor = hasMore && lastTask !== undefined ? encodeCursor(lastTask) : undefined;
+    const meta: ApiMeta = nextCursor === undefined ? { hasMore } : { cursor: nextCursor, hasMore };
+    return success(200, page, meta);
+  }
+
   private trashTask(user: UserRecord, taskId: string): HttpResult<Task> {
     const task = this.database.findTask(user.id, taskId);
     if (task === undefined) {
@@ -470,6 +670,11 @@ export class ApiService {
     }
     const updated = trashTask(task, this.now());
     this.database.saveTask(updated);
+    for (const reminder of this.database.findRemindersForTask(user.id, taskId)) {
+      if (reminder.state === 'SCHEDULED') {
+        this.database.saveReminder({ ...cancelReminder(reminder), title: reminder.title });
+      }
+    }
     return success(200, updated);
   }
 
@@ -480,11 +685,28 @@ export class ApiService {
     }
     const listId =
       this.database.findList(user.id, task.listId) === undefined ? INBOX_LIST_ID : task.listId;
+    const now = this.now();
     const restored = {
-      ...restoreTask(task, this.now()),
+      ...restoreTask(task, now),
       listId
     };
     this.database.saveTask(restored);
+    const reminder = this.database
+      .findRemindersForTask(user.id, taskId)
+      .find((candidate) => candidate.state === 'SKIPPED');
+    if (reminder !== undefined) {
+      try {
+        this.database.saveReminder({
+          ...reactivateReminder(reminder, now),
+          title: reminder.title,
+          taskVersion: restored.version
+        });
+      } catch (error) {
+        if (!(error instanceof DomainError)) {
+          throw error;
+        }
+      }
+    }
     return success(200, restored);
   }
 

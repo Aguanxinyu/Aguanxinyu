@@ -50,6 +50,8 @@ Page({
     tasks: [] as readonly DisplayTask[],
     quickTitle: '',
     loading: false,
+    loadingMore: false,
+    hasMore: false,
     pendingCount: 0
   },
 
@@ -57,7 +59,8 @@ Page({
     unsubscribe = todoController.subscribe((state: TodoState) => {
       this.setData({
         tasks: state.tasks.filter(({ status }) => status !== 'TRASHED').map(displayTask),
-        pendingCount: state.pendingMutations.length
+        pendingCount: state.pendingMutations.length,
+        hasMore: state.hasMore
       });
     });
   },
@@ -112,6 +115,30 @@ Page({
       await todoController.toggleTask(taskId);
     } catch (error) {
       void wx.showToast({ title: messageFor(error), icon: 'none' });
+    }
+  },
+
+  onOpenTask(event: WechatMiniprogram.BaseEvent) {
+    const taskId = String(event.currentTarget.dataset.id ?? '');
+    if (taskId.length === 0) {
+      return;
+    }
+    void wx.navigateTo({
+      url: `/pages/task-edit/index?id=${encodeURIComponent(taskId)}`
+    });
+  },
+
+  async onReachBottom() {
+    if (this.data.loadingMore) {
+      return;
+    }
+    this.setData({ loadingMore: true });
+    try {
+      await todoController.loadMore();
+    } catch (error) {
+      void wx.showToast({ title: messageFor(error), icon: 'none' });
+    } finally {
+      this.setData({ loadingMore: false });
     }
   },
 

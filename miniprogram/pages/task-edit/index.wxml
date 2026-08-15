@@ -1,6 +1,6 @@
 <view class="page edit-page">
-  <view class="page-title">新建待办</view>
-  <view class="page-subtitle">只填标题也可以立即保存</view>
+  <view class="page-title">{{pageTitle}}</view>
+  <view class="page-subtitle">{{pageSubtitle}}</view>
 
   <view class="card form-card">
     <view class="field">
@@ -67,12 +67,16 @@
       <picker
         value="{{repeatIndex}}"
         range="{{repeats}}"
+        disabled="{{repeatDisabled}}"
         bindchange="onRepeatChange"
         aria-label="重复频率"
       >
-        <view class="picker-value">{{repeats[repeatIndex]}} ›</view>
+        <view class="picker-value {{repeatDisabled ? 'picker-value--muted' : ''}}">
+          {{repeats[repeatIndex]}} ›
+        </view>
       </picker>
     </view>
+    <view wx:if="{{repeatDisabled}}" class="repeat-hint">重复任务：修改仅影响本次</view>
     <view class="field">
       <text class="label">地点</text>
       <input
@@ -86,6 +90,16 @@
   </view>
 
   <button class="primary-button save-button" loading="{{saving}}" bindtap="onSave">
-    保存待办
+    {{id.length > 0 ? '保存修改' : '保存待办'}}
   </button>
+
+  <view wx:if="{{showScopeDialog}}" class="scope-mask">
+    <view class="scope-dialog" aria-label="修改范围">
+      <view class="scope-title">修改范围</view>
+      <view class="scope-body">这是重复任务，修改仅影响本次待办。</view>
+      <button class="scope-action" bindtap="onScopeOnlyThis">仅本次</button>
+      <button class="scope-action scope-action--disabled" disabled>本次及以后（后续支持）</button>
+      <view class="scope-cancel" bindtap="onScopeCancel">取消</view>
+    </view>
+  </view>
 </view>

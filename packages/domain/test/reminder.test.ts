@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import type { ReminderState } from '@today-todo/contracts';
 
-import { cancelReminder, createReminderForTask, reminderTimeFor } from '../src/reminder.js';
+import {
+  cancelReminder,
+  createReminderForTask,
+  reactivateReminder,
+  reminderTimeFor
+} from '../src/reminder.js';
 import { createTask } from './fixtures.js';
 
 describe('reminder rules', () => {
@@ -76,6 +81,43 @@ describe('reminder rules', () => {
     expect(cancelled).toEqual({ ...reminder, state: 'SKIPPED' });
     expect(cancelled).not.toBe(reminder);
     expect(reminder.state).toBe('SCHEDULED');
+  });
+
+  it('reactivates a skipped reminder whose fire time is still in the future', () => {
+    const reminder = {
+      ...createReminderForTask(
+        createTask({ dueAt: now + 2 * tenMinutes, dueHasTime: true }),
+        now,
+        'reminder-1'
+      ),
+      state: 'SKIPPED' as const
+    };
+
+    expect(reactivateReminder(reminder, now)).toEqual({ ...reminder, state: 'SCHEDULED' });
+    expect(reminder.state).toBe('SKIPPED');
+  });
+
+  it('rejects reactivating a reminder that is not skipped', () => {
+    const reminder = createReminderForTask(
+      createTask({ dueAt: now + 2 * tenMinutes, dueHasTime: true }),
+      now,
+      'reminder-1'
+    );
+
+    expect(() => reactivateReminder(reminder, now)).toThrow('REMINDER_INVALID_STATE');
+  });
+
+  it('rejects reactivating a skipped reminder whose fire time has passed', () => {
+    const reminder = {
+      ...createReminderForTask(
+        createTask({ dueAt: now + tenMinutes, dueHasTime: true }),
+        now,
+        'reminder-1'
+      ),
+      state: 'SKIPPED' as const
+    };
+
+    expect(() => reactivateReminder(reminder, now + tenMinutes)).toThrow('REMINDER_TOO_LATE');
   });
 
   it('returns an already skipped reminder unchanged', () => {

@@ -148,6 +148,13 @@
   border: 0;
 }
 
+.load-more {
+  padding: 24rpx 0;
+  color: #94a3b8;
+  font-size: 24rpx;
+  text-align: center;
+}
+
 .quick-create {
   position: fixed;
   right: 28rpx;

@@ -57,6 +57,7 @@ export interface BackendDatabase {
   saveSeries(series: SeriesRecord): void;
 
   remindersDueAtOrBefore(now: number): readonly ReminderRecord[];
+  findRemindersForTask(userId: string, taskId: string): readonly ReminderRecord[];
   saveReminder(reminder: ReminderRecord): void;
   reminderGrantFor(userId: string): number;
   addReminderGrant(userId: string, maximum: number): number;

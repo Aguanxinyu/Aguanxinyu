@@ -4,10 +4,21 @@ import type { ClientTask } from '../stores/todo-store.js';
 const TOKEN_KEY = 'today-todo:session-token';
 const USER_ID_KEY = 'today-todo:user-id';
 const TODO_STATE_KEY = 'today-todo:state';
+const REQUEST_TIMEOUT_MS = 15000;
 
 interface ApiErrorBody {
   readonly code: string;
   readonly message: string;
+}
+
+interface ApiMetaShape {
+  readonly cursor?: string;
+  readonly hasMore?: boolean;
+}
+
+interface EnvelopeResult<T> {
+  readonly data: T;
+  readonly meta: ApiMetaShape;
 }
 
 type ApiEnvelope<T> =
@@ -15,19 +26,21 @@ type ApiEnvelope<T> =
       readonly success: true;
       readonly data: T;
       readonly error: null;
-      readonly meta: Readonly<Record<string, unknown>>;
+      readonly meta: ApiMetaShape;
     }
   | {
       readonly success: false;
       readonly data: null;
       readonly error: ApiErrorBody;
-      readonly meta: Readonly<Record<string, unknown>>;
+      readonly meta: ApiMetaShape;
     };
 
 interface LoginData {
   readonly token: string;
   readonly userId: string;
 }
+
+let reloginPromise: Promise<LoginData> | null = null;
 
 export interface ClientList {
   readonly id: string;
@@ -74,6 +87,16 @@ export interface CreateTaskInput {
         readonly monthDay: number;
         readonly endDate?: string;
       };
+}
+
+export type UpdateTaskInput = Partial<Omit<CreateTaskInput, 'recurrence' | 'reminderEnabled'>> & {
+  readonly reminderEnabled?: boolean;
+};
+
+export interface TaskListResult {
+  readonly tasks: readonly ClientTask[];
+  readonly cursor: string | null;
+  readonly hasMore: boolean;
 }
 
 export class ApiClientError extends Error {
@@ -146,8 +169,31 @@ export class ApiClient {
     return result;
   }
 
-  public listTasks(): Promise<readonly ClientTask[]> {
-    return this.request('GET', '/v1/tasks');
+  public async listTasks(cursor?: string): Promise<TaskListResult> {
+    const path =
+      cursor === undefined || cursor.length === 0
+        ? '/v1/tasks'
+        : `/v1/tasks?cursor=${encodeURIComponent(cursor)}`;
+    const envelope = await this.requestEnvelope<readonly ClientTask[]>('GET', path);
+    return {
+      tasks: envelope.data,
+      cursor: envelope.meta.cursor ?? null,
+      hasMore: envelope.meta.hasMore === true
+    };
+  }
+
+  public getTask(taskId: string): Promise<ClientTask> {
+    return this.request('GET', `/v1/tasks/${encodeURIComponent(taskId)}`);
+  }
+
+  public updateTask(taskId: string, input: UpdateTaskInput, version: number): Promise<ClientTask> {
+    return this.request(
+      'POST',
+      `/v1/tasks/${encodeURIComponent(taskId)}`,
+      { ...input, version },
+      true,
+      { 'x-http-method-override': 'PATCH' }
+    );
   }
 
   public listLists(): Promise<readonly ClientList[]> {
@@ -204,50 +250,93 @@ export class ApiClient {
     return this.request('POST', '/v1/account/deletion', undefined, true);
   }
 
-  private async request<T>(
+  private request<T>(
     method: 'DELETE' | 'GET' | 'POST',
     path: string,
     data?: unknown,
-    isWrite = false
+    isWrite = false,
+    extraHeaders?: Readonly<Record<string, string>>
   ): Promise<T> {
-    const token = this.getStoredToken();
-    const writeRequestId = isWrite ? await requestId() : null;
-    return new Promise<T>((resolve, reject) => {
-      let baseUrl: string;
-      try {
-        baseUrl = getApiBaseUrl();
-      } catch {
-        reject(new ApiClientError('API_NOT_CONFIGURED', '请先配置后端服务地址'));
-        return;
-      }
+    return this.requestEnvelope<T>(method, path, data, isWrite, extraHeaders).then(
+      (envelope) => envelope.data
+    );
+  }
 
-      wx.request({
-        url: `${baseUrl}${path}`,
-        method,
-        ...(data === undefined ? {} : { data: JSON.stringify(data) }),
-        header: {
-          'content-type': 'application/json',
-          ...(token === null ? {} : { 'x-session-token': token }),
-          ...(writeRequestId === null ? {} : { 'x-request-id': writeRequestId })
-        },
-        success: ({ statusCode, data: responseData }) => {
-          if (!isEnvelope<T>(responseData)) {
-            reject(new ApiClientError('INVALID_RESPONSE', '服务器返回了无法识别的数据'));
+  private async requestEnvelope<T>(
+    method: 'DELETE' | 'GET' | 'POST',
+    path: string,
+    data?: unknown,
+    isWrite = false,
+    extraHeaders?: Readonly<Record<string, string>>
+  ): Promise<EnvelopeResult<T>> {
+    const first = await this.sendRequest<T>(method, path, data, isWrite, extraHeaders);
+    if (first.envelope.success) {
+      return { data: first.envelope.data, meta: first.envelope.meta };
+    }
+    if (first.status === 401 && path !== '/v1/auth/login') {
+      this.clearSession();
+      reloginPromise = reloginPromise ?? this.login();
+      try {
+        await reloginPromise;
+      } finally {
+        reloginPromise = null;
+      }
+      const retried = await this.sendRequest<T>(method, path, data, isWrite, extraHeaders);
+      if (retried.envelope.success) {
+        return { data: retried.envelope.data, meta: retried.envelope.meta };
+      }
+      throw new ApiClientError(
+        retried.status === 401 ? 'AUTH_REQUIRED' : retried.envelope.error.code,
+        retried.envelope.error.message
+      );
+    }
+    throw new ApiClientError(first.envelope.error.code, first.envelope.error.message);
+  }
+
+  private sendRequest<T>(
+    method: 'DELETE' | 'GET' | 'POST',
+    path: string,
+    data: unknown,
+    isWrite: boolean,
+    extraHeaders?: Readonly<Record<string, string>>
+  ): Promise<{ readonly status: number; readonly envelope: ApiEnvelope<T> }> {
+    const token = this.getStoredToken();
+    const requestIdForWrite = isWrite ? requestId() : Promise.resolve(null);
+    return requestIdForWrite.then((writeRequestId) => {
+      return new Promise<{ readonly status: number; readonly envelope: ApiEnvelope<T> }>(
+        (resolve, reject) => {
+          let baseUrl: string;
+          try {
+            baseUrl = getApiBaseUrl();
+          } catch {
+            reject(new ApiClientError('API_NOT_CONFIGURED', '请先配置后端服务地址'));
             return;
           }
-          if (!responseData.success) {
-            if (statusCode === 401) {
-              this.clearSession();
+
+          wx.request({
+            url: `${baseUrl}${path}`,
+            method,
+            timeout: REQUEST_TIMEOUT_MS,
+            ...(data === undefined ? {} : { data: JSON.stringify(data) }),
+            header: {
+              'content-type': 'application/json',
+              ...(extraHeaders === undefined ? {} : extraHeaders),
+              ...(token === null ? {} : { 'x-session-token': token }),
+              ...(writeRequestId === null ? {} : { 'x-request-id': writeRequestId })
+            },
+            success: ({ statusCode, data: responseData }) => {
+              if (!isEnvelope<T>(responseData)) {
+                reject(new ApiClientError('INVALID_RESPONSE', '服务器返回了无法识别的数据'));
+                return;
+              }
+              resolve({ status: statusCode, envelope: responseData });
+            },
+            fail: () => {
+              reject(new ApiClientError('NETWORK_ERROR', '网络连接失败，请稍后重试'));
             }
-            reject(new ApiClientError(responseData.error.code, responseData.error.message));
-            return;
-          }
-          resolve(responseData.data);
-        },
-        fail: () => {
-          reject(new ApiClientError('NETWORK_ERROR', '网络连接失败，请稍后重试'));
+          });
         }
-      });
+      );
     });
   }
 }

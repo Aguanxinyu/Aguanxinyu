@@ -36,7 +36,7 @@
         aria-label="{{task.title}}，优先级：{{task.priorityLabel}}，截止：{{task.dueLabel}}，{{task.done ? '已完成' : '未完成'}}"
       >
         <view class="check" aria-hidden="true">{{task.done ? '✓' : ''}}</view>
-        <view class="task-content">
+        <view class="task-content" data-id="{{task.id}}" catchtap="onOpenTask">
           <text class="task-title">{{task.title}}</text>
           <view class="task-meta">
             <text class="priority priority--{{task.priority}}">{{task.priorityLabel}}</text>
@@ -57,6 +57,12 @@
     <view wx:if="{{tasks.length === 0}}" class="empty">
       今天还没有待办，先写下第一件事
     </view>
+  </view>
+
+  <view wx:if="{{tasks.length > 0}}" class="load-more">
+    <text wx:if="{{loadingMore}}">加载中…</text>
+    <text wx:elif="{{hasMore}}">上拉加载更多</text>
+    <text wx:else>没有更多了</text>
   </view>
 
   <view class="quick-create card">

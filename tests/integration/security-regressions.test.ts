@@ -44,6 +44,40 @@ describe('security and idempotency regressions', () => {
     expect(task.body.success && task.body.data.title).toBe('不同路由');
   });
 
+  it('does not let one user PATCH another user todo', async () => {
+    const system = createTestSystem({ now: Date.UTC(2026, 6, 31, 4) });
+    const alice = await system.login('alice');
+    const bob = await system.login('bob');
+    const created = await system.request({
+      method: 'POST',
+      path: '/v1/tasks',
+      token: alice.token,
+      requestId: 'alice-task',
+      body: {
+        title: 'Alice private task',
+        priority: 'MEDIUM',
+        dueHasTime: false,
+        tagIds: []
+      }
+    });
+    const taskId = created.body.success ? created.body.data.id : '';
+    const version = created.body.success ? created.body.data.version : 0;
+
+    const response = await system.request({
+      method: 'PATCH',
+      path: `/v1/tasks/${taskId}`,
+      token: bob.token,
+      requestId: 'bob-patch',
+      body: { version, title: 'hacked' }
+    });
+
+    expect(response.status).toBe(404);
+    expect(response.body).toMatchObject({
+      success: false,
+      error: { code: 'TASK_NOT_FOUND' }
+    });
+  });
+
   it('does not persist a task when reminder validation fails', async () => {
     const now = Date.UTC(2026, 6, 31, 4);
     const system = createTestSystem({ now });

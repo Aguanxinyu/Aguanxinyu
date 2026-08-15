@@ -71,6 +71,205 @@ describe('authenticated todo API flow', () => {
     expect(restored.body.success && restored.body.data.status).toBe('DONE');
   });
 
+  it('edits a task with PATCH and syncs its reminder', async () => {
+    const now = Date.UTC(2026, 6, 31, 4);
+    const system = createTestSystem({ now });
+    const user = await system.login('edit-user');
+    const created = await system.request({
+      method: 'POST',
+      path: '/v1/tasks',
+      token: user.token,
+      requestId: 'create-1',
+      body: {
+        title: '原始标题',
+        priority: 'MEDIUM',
+        dueHasTime: false,
+        tagIds: []
+      }
+    });
+    expect(created.status).toBe(201);
+    const taskId = created.body.success ? created.body.data.id : '';
+    const version = created.body.success ? created.body.data.version : 0;
+
+    const edited = await system.request({
+      method: 'PATCH',
+      path: `/v1/tasks/${taskId}`,
+      token: user.token,
+      requestId: 'patch-1',
+      body: {
+        version,
+        title: '新标题',
+        priority: 'HIGH',
+        dueAt: now + 60 * 60 * 1000,
+        dueHasTime: true,
+        reminderEnabled: true
+      }
+    });
+    expect(edited.status).toBe(200);
+    expect(edited.body.success && edited.body.data).toMatchObject({
+      title: '新标题',
+      priority: 'HIGH',
+      dueAt: now + 60 * 60 * 1000,
+      dueHasTime: true,
+      version: version + 1,
+      remindAt: now + 50 * 60 * 1000
+    });
+
+    const newVersion = edited.body.success ? edited.body.data.version : 0;
+    const disabled = await system.request({
+      method: 'PATCH',
+      path: `/v1/tasks/${taskId}`,
+      token: user.token,
+      requestId: 'patch-2',
+      body: {
+        version: newVersion,
+        reminderEnabled: false
+      }
+    });
+    expect(disabled.status).toBe(200);
+    expect(disabled.body.success && disabled.body.data.remindAt).toBeUndefined();
+  });
+
+  it('rejects a PATCH that carries a stale version', async () => {
+    const system = createTestSystem({ now: Date.UTC(2026, 6, 31, 4) });
+    const user = await system.login('stale-version-user');
+    const created = await system.request({
+      method: 'POST',
+      path: '/v1/tasks',
+      token: user.token,
+      requestId: 'create-1',
+      body: {
+        title: '冲突目标',
+        priority: 'MEDIUM',
+        dueHasTime: false,
+        tagIds: []
+      }
+    });
+    const taskId = created.body.success ? created.body.data.id : '';
+
+    await system.request({
+      method: 'PATCH',
+      path: `/v1/tasks/${taskId}`,
+      token: user.token,
+      requestId: 'patch-1',
+      body: { version: 1, title: '第一次修改' }
+    });
+
+    const stale = await system.request({
+      method: 'PATCH',
+      path: `/v1/tasks/${taskId}`,
+      token: user.token,
+      requestId: 'patch-2',
+      body: { version: 1, title: '冲突修改' }
+    });
+    expect(stale.status).toBe(409);
+    expect(stale.body).toMatchObject({
+      success: false,
+      error: { code: 'VERSION_CONFLICT' }
+    });
+
+    const current = await system.request({
+      method: 'GET',
+      path: `/v1/tasks/${taskId}`,
+      token: user.token
+    });
+    expect(current.body.success && current.body.data.title).toBe('第一次修改');
+  });
+
+  it('accepts a POST with an X-HTTP-Method-Override header as an update', async () => {
+    const system = createTestSystem({ now: Date.UTC(2026, 6, 31, 4) });
+    const user = await system.login('override-user');
+    const created = await system.request({
+      method: 'POST',
+      path: '/v1/tasks',
+      token: user.token,
+      requestId: 'create-1',
+      body: {
+        title: '覆盖前',
+        priority: 'MEDIUM',
+        dueHasTime: false,
+        tagIds: []
+      }
+    });
+    const taskId = created.body.success ? created.body.data.id : '';
+    const version = created.body.success ? created.body.data.version : 0;
+
+    const updated = await system.request({
+      method: 'POST',
+      path: `/v1/tasks/${taskId}`,
+      methodOverride: 'PATCH',
+      token: user.token,
+      requestId: 'override-patch',
+      body: { version, title: '覆盖后' }
+    });
+    expect(updated.status).toBe(200);
+    expect(updated.body.success && updated.body.data).toMatchObject({
+      title: '覆盖后',
+      version: version + 1
+    });
+  });
+
+  it('paginates the task list without duplicates or omissions', async () => {
+    const system = createTestSystem({ now: Date.UTC(2026, 6, 31, 4) });
+    const user = await system.login('page-user');
+    for (let index = 0; index < 5; index += 1) {
+      const created = await system.request({
+        method: 'POST',
+        path: '/v1/tasks',
+        token: user.token,
+        requestId: `create-${String(index)}`,
+        body: {
+          title: `待办 ${String(index)}`,
+          priority: 'MEDIUM',
+          dueHasTime: false,
+          tagIds: []
+        }
+      });
+      expect(created.status).toBe(201);
+    }
+
+    const first = await system.request({
+      method: 'GET',
+      path: '/v1/tasks',
+      token: user.token,
+      query: { limit: '2' }
+    });
+    expect(first.status).toBe(200);
+    expect(first.body.success && first.body.data).toHaveLength(2);
+    expect(first.body.meta.hasMore).toBe(true);
+    const cursor1 = first.body.meta.cursor;
+    expect(cursor1).toBeDefined();
+
+    const second = await system.request({
+      method: 'GET',
+      path: '/v1/tasks',
+      token: user.token,
+      query: { limit: '2', cursor: cursor1 ?? '' }
+    });
+    expect(second.body.success && second.body.data).toHaveLength(2);
+    expect(second.body.meta.hasMore).toBe(true);
+    const cursor2 = second.body.meta.cursor;
+    expect(cursor2).toBeDefined();
+
+    const third = await system.request({
+      method: 'GET',
+      path: '/v1/tasks',
+      token: user.token,
+      query: { limit: '2', cursor: cursor2 ?? '' }
+    });
+    expect(third.body.success && third.body.data).toHaveLength(1);
+    expect(third.body.meta.hasMore).toBe(false);
+    expect(third.body.meta.cursor).toBeUndefined();
+
+    const ids = [
+      ...(first.body.success ? first.body.data.map((task) => task.id) : []),
+      ...(second.body.success ? second.body.data.map((task) => task.id) : []),
+      ...(third.body.success ? third.body.data.map((task) => task.id) : [])
+    ];
+    expect(ids).toHaveLength(5);
+    expect(new Set(ids).size).toBe(5);
+  });
+
   it('prevents one user from reading another user todo', async () => {
     const system = createTestSystem({ now: Date.UTC(2026, 6, 31, 4) });
     const alice = await system.login('alice');

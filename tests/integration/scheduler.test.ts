@@ -107,6 +107,59 @@ describe('background schedulers', () => {
     });
   });
 
+  it('cancels a scheduled reminder on trash and reactivates it on restore', async () => {
+    const now = Date.UTC(2026, 6, 31, 4);
+    const system = createTestSystem({ now });
+    const user = await system.login('reminder-cycle-user');
+    await system.request({
+      method: 'POST',
+      path: '/v1/reminder-grants',
+      token: user.token,
+      requestId: 'grant-1',
+      body: { accepted: true }
+    });
+    const created = await system.request({
+      method: 'POST',
+      path: '/v1/tasks',
+      token: user.token,
+      requestId: 'task-1',
+      body: {
+        title: '未来提醒',
+        priority: 'MEDIUM',
+        dueAt: now + 60 * 60 * 1000,
+        dueHasTime: true,
+        reminderEnabled: true,
+        tagIds: []
+      }
+    });
+    const taskId = created.body.success ? created.body.data.id : '';
+    const reminderState = (): string | undefined =>
+      system.database.findRemindersForTask(user.userId, taskId)[0]?.state;
+    expect(reminderState()).toBe('SCHEDULED');
+
+    await system.request({
+      method: 'DELETE',
+      path: `/v1/tasks/${taskId}`,
+      token: user.token,
+      requestId: 'trash-1'
+    });
+    expect(reminderState()).toBe('SKIPPED');
+
+    await system.runReminderTicker(now + 50 * 60 * 1000);
+    expect(system.sentMessages).toEqual([]);
+
+    await system.request({
+      method: 'POST',
+      path: `/v1/trash/${taskId}/restore`,
+      token: user.token,
+      requestId: 'restore-1'
+    });
+    expect(reminderState()).toBe('SCHEDULED');
+
+    await system.runReminderTicker(now + 50 * 60 * 1000);
+    expect(system.sentMessages).toHaveLength(1);
+  });
+
   it('skips a reminder when its task was completed before dispatch', async () => {
     const now = Date.UTC(2026, 6, 31, 4);
     const system = createTestSystem({ now });

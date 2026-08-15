@@ -1,6 +1,12 @@
-import { ApiClientError, apiClient, type CreateTaskInput } from '../services/api.js';
+import {
+  ApiClientError,
+  apiClient,
+  type CreateTaskInput,
+  type UpdateTaskInput
+} from '../services/api.js';
 import {
   acknowledgeMutation,
+  appendTasks,
   createTodoState,
   enqueueMutation,
   replaceTasks,
@@ -54,7 +60,11 @@ function isTodoState(value: unknown): value is TodoState {
     Array.isArray(value.tasks) &&
     value.tasks.every(isClientTask) &&
     Array.isArray(value.pendingMutations) &&
-    value.pendingMutations.every(isPendingMutation)
+    value.pendingMutations.every(isPendingMutation) &&
+    (value.nextCursor === undefined ||
+      value.nextCursor === null ||
+      typeof value.nextCursor === 'string') &&
+    (value.hasMore === undefined || typeof value.hasMore === 'boolean')
   );
 }
 
@@ -87,7 +97,9 @@ export class TodoController {
       this.publish({
         tasks: [...cached.tasks],
         pendingMutations: [...cached.pendingMutations],
-        syncedAt: typeof cached.syncedAt === 'number' ? cached.syncedAt : null
+        syncedAt: typeof cached.syncedAt === 'number' ? cached.syncedAt : null,
+        nextCursor: typeof cached.nextCursor === 'string' ? cached.nextCursor : null,
+        hasMore: (cached.hasMore as boolean | undefined) === true
       });
     }
   }
@@ -98,8 +110,8 @@ export class TodoController {
         await apiClient.login();
       }
       await this.flushPendingMutations();
-      const tasks = await apiClient.listTasks();
-      this.publish(replaceTasks(this.state, tasks, Date.now()));
+      const page = await apiClient.listTasks();
+      this.publish(replaceTasks(this.state, page.tasks, Date.now(), page.cursor, page.hasMore));
     } catch (error) {
       if (error instanceof ApiClientError && error.code === 'AUTH_REQUIRED') {
         this.publish({
@@ -118,6 +130,24 @@ export class TodoController {
       tasks: [task, ...this.state.tasks]
     });
     return task;
+  }
+
+  public async loadMore(): Promise<void> {
+    if (!this.state.hasMore || this.state.nextCursor === null) {
+      return;
+    }
+    const page = await apiClient.listTasks(this.state.nextCursor);
+    this.publish(appendTasks(this.state, page.tasks, page.cursor, page.hasMore));
+  }
+
+  public async update(
+    taskId: string,
+    input: UpdateTaskInput,
+    version: number
+  ): Promise<ClientTask> {
+    const updated = await apiClient.updateTask(taskId, input, version);
+    this.publish(replaceTask(this.state, updated));
+    return updated;
   }
 
   public async toggleTask(taskId: string): Promise<void> {

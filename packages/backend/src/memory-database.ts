@@ -228,6 +228,12 @@ export class MemoryDatabase implements BackendDatabase {
     );
   }
 
+  public findRemindersForTask(userId: string, taskId: string): readonly ReminderRecord[] {
+    return this.snapshot.reminders.filter(
+      (reminder) => reminder.userId === userId && reminder.taskId === taskId
+    );
+  }
+
   public saveReminder(reminder: ReminderRecord): void {
     this.snapshot = {
       ...this.snapshot,

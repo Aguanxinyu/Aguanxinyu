@@ -68,3 +68,65 @@
 .save-button {
   margin-top: 40rpx;
 }
+
+.picker-value--muted {
+  color: #94a3b8;
+}
+
+.repeat-hint {
+  padding: 14rpx 0 2rpx;
+  color: #94a3b8;
+  font-size: 24rpx;
+}
+
+.scope-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: flex-end;
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.scope-dialog {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 36rpx 32rpx calc(24rpx + env(safe-area-inset-bottom));
+  border-radius: 28rpx 28rpx 0 0;
+  background: #ffffff;
+}
+
+.scope-title {
+  color: #0f172a;
+  font-size: 32rpx;
+  font-weight: 600;
+  text-align: center;
+}
+
+.scope-body {
+  margin-top: 16rpx;
+  color: #64748b;
+  font-size: 26rpx;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.scope-action {
+  margin-top: 28rpx;
+  border-radius: 20rpx;
+  background: #2563eb;
+  color: #ffffff;
+  font-size: 30rpx;
+}
+
+.scope-action--disabled {
+  background: #e2e8f0;
+  color: #94a3b8;
+}
+
+.scope-cancel {
+  margin-top: 24rpx;
+  color: #64748b;
+  font-size: 28rpx;
+  text-align: center;
+}

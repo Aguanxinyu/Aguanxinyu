@@ -43,3 +43,16 @@ export function cancelReminder(reminder: Reminder): Reminder {
     state: 'SKIPPED'
   };
 }
+
+export function reactivateReminder(reminder: Reminder, now: number): Reminder {
+  if (reminder.state !== 'SKIPPED') {
+    throw new DomainError('REMINDER_INVALID_STATE');
+  }
+  if (reminder.fireAt <= now) {
+    throw new DomainError('REMINDER_TOO_LATE');
+  }
+  return {
+    ...reminder,
+    state: 'SCHEDULED'
+  };
+}

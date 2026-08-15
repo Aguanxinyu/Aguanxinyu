@@ -144,7 +144,7 @@ docs/
 
 模块职责：
 
-- `miniprogram`：页面、组件、客户端状态、请求和只读缓存。
+- `miniprogram`：页面、组件、客户端状态、请求和缓存（含离线写回）。
 - `contracts`：请求、响应、领域类型和错误码的单一事实来源。
 - `domain`：状态迁移、重复规则、时间计算和配额规则等纯函数。
 - `repositories`：Tablestore SDK 的唯一访问出口。
@@ -484,6 +484,10 @@ ACTIVE ──→ DELETION_PENDING ──→ DELETED
 | `POST` | `/v1/tasks/{taskId}/uncomplete` | 撤销完成 |
 | `DELETE` | `/v1/tasks/{taskId}` | 移入回收站 |
 
+`GET /v1/tasks` 使用游标分页：`query.limit` 默认 50、上限 100；响应 `meta.cursor` 为下一页游标（keyset，排序键为 `dueAt → 优先级 → createdAt → id`），`meta.hasMore` 表示是否还有更多，末页不返回 `cursor`。
+
+微信 `wx.request` 不支持 `PATCH` 方法，编辑请求由前端以 `POST` + `X-HTTP-Method-Override: PATCH` 头发送；后端在 HTTP 边界还原为 PATCH 语义，路由和幂等键均按 PATCH 处理。
+
 ### 9.3 回收站
 
 | 方法 | 路径 | 用途 |
@@ -546,13 +550,13 @@ Store 分为：
 - 网络状态。
 - 同步状态。
 
-### 10.3 只读缓存
+### 10.3 离线缓存与写回
 
 - 缓存任务、清单和标签的最近同步结果。
 - 缓存键按用户隔离。
 - 缓存包含 schema 版本。
 - schema 不兼容时清空并重新同步。
-- 离线时设置 `isStale`，禁止所有写操作。
+- 离线时设置 `isStale`，写操作进入待同步队列并显示待同步数量，网络恢复后回放。
 - 注销时清空该用户全部本地缓存和凭证。
 
 ## 11. 安全与隐私
@@ -744,5 +748,5 @@ Store 分为：
 | ADR-006 | 提醒采用每分钟扫描，接受约 9～10 分钟精度 |
 | ADR-007 | 提醒优先避免重复发送，未知结果不自动重发 |
 | ADR-008 | 地图选点可降级为手动地点 |
-| ADR-009 | 离线仅允许读取缓存 |
+| ADR-009 | 离线可读取缓存，写操作排队并在网络恢复后回放 |
 | ADR-010 | 业务时区固定为 `Asia/Shanghai` |
