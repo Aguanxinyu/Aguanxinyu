@@ -10,7 +10,9 @@ export type DomainErrorCode =
   | 'TASK_INVALID_STATE'
   | 'TASK_MISSING_ORIGINAL_STATE'
   | 'TASK_MISSING_PURGE_TIME'
-  | 'TASK_NOT_TRASHED';
+  | 'TASK_NOT_TRASHED'
+  | 'WECHAT_LOGIN_FAILED'
+  | 'WECHAT_NOT_CONFIGURED';
 
 export class DomainError extends Error {
   public readonly code: DomainErrorCode;

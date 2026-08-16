@@ -1,0 +1,21 @@
+[Unit]
+Description=today-todo backend HTTP service (node + postgres)
+After=postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=simple
+# 部署前需先构建：cd /root/todo-app && npm run build -w @today-todo/backend
+WorkingDirectory=/root/todo-app
+EnvironmentFile=/root/todo-app/.env
+ExecStart=/usr/bin/node /root/todo-app/packages/backend/dist/server.js
+# 如需降权运行：useradd -r -s /usr/sbin/nologin todo 后取消注释，并 chown -R todo:todo /root/todo-app
+# User=todo
+# Group=todo
+Restart=always
+RestartSec=3
+# 1.6GiB 内存机器，限制 Node 堆上限避免 OOM 拖垮系统
+Environment=NODE_OPTIONS=--max-old-space-size=512
+
+[Install]
+WantedBy=multi-user.target

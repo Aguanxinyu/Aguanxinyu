@@ -3,6 +3,14 @@ export type { BackendDatabase } from './database.js';
 export { MemoryDatabase } from './memory-database.js';
 export { PostgresDatabase } from './postgres-database.js';
 export { Schedulers, type SchedulerOptions } from './schedulers.js';
+export { startServer, type HttpServerOptions } from './http-server.js';
+export {
+  buildTemplateData,
+  createWechatClient,
+  type TemplateFieldValue,
+  type WechatClient,
+  type WechatClientOptions
+} from './wechat.js';
 export {
   createTestSystem,
   TestSystem,
