@@ -1,19 +1,10 @@
-interface ExternalConfig {
-  readonly apiBaseUrl?: unknown;
-  readonly reminderTemplateId?: unknown;
-}
+const API_BASE_URL = 'https://todo.guanxinyu.com';
+const REMINDER_TEMPLATE_ID = 'bEzUbq1ltmfsqWQuTES6mSrB6iFrjU9JyobcG57Cv8s';
 
 export function getApiBaseUrl(): string {
-  const config = wx.getExtConfigSync() as ExternalConfig;
-  if (typeof config.apiBaseUrl !== 'string' || !config.apiBaseUrl.startsWith('https://')) {
-    throw new Error('API_BASE_URL_NOT_CONFIGURED');
-  }
-  return config.apiBaseUrl.replace(/\/$/, '');
+  return API_BASE_URL.replace(/\/$/, '');
 }
 
 export function getReminderTemplateId(): string | null {
-  const config = wx.getExtConfigSync() as ExternalConfig;
-  return typeof config.reminderTemplateId === 'string' && config.reminderTemplateId.length > 0
-    ? config.reminderTemplateId
-    : null;
+  return REMINDER_TEMPLATE_ID;
 }

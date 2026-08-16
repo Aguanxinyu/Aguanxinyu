@@ -49,16 +49,16 @@ npm run check
 使用微信开发者工具打开 `miniprogram/`。开发工具项目当前使用
 `touristappid`，接入真实账号时应改为正式 AppId。
 
-小程序通过微信扩展配置读取非密钥环境参数：
+后端地址与订阅消息模板 ID 写在 `miniprogram/config.ts`（普通小程序无
+extConfig 后台入口，`wx.getExtConfigSync()` 在真机返回空，只能编译进代码）：
 
-```json
-{
-  "apiBaseUrl": "https://api.example.com",
-  "reminderTemplateId": "your-template-id"
-}
+```ts
+const API_BASE_URL = 'https://todo.guanxinyu.com';
+const REMINDER_TEMPLATE_ID = 'your-template-id';
 ```
 
-`apiBaseUrl` 必须使用已备案并配置为微信合法请求域名的 HTTPS 地址。
+`apiBaseUrl` 必须使用已备案并配置为微信**合法请求域名**的 HTTPS 地址
+（公众平台后台：开发 → 开发设置 → 服务器域名 → request 合法域名）。
 AppSecret、阿里云访问凭据和会话签名材料不得写入小程序或仓库。
 
 ## 依赖安全
