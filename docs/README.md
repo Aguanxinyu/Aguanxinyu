@@ -7,21 +7,22 @@
 | 文档 | 用途 | 状态 |
 | --- | --- | --- |
 | [`PRD.md`](./PRD.md) | 产品目标、范围、规则和验收标准 | 已确认 |
-| [`TECHNICAL_DESIGN.md`](./TECHNICAL_DESIGN.md) | 阿里云 Serverless 架构、数据、接口、安全和测试 | 已确认 |
+| [`TECHNICAL_DESIGN.md`](./TECHNICAL_DESIGN.md) | 自建 Node + PostgreSQL 架构、数据、接口、安全和测试 | 已确认，后续有部署路径修订 |
 | [`UI_SPEC.md`](./UI_SPEC.md) | 页面结构、交互、视觉令牌和状态设计 | 已确认 |
-| [`IMPLEMENTATION_PLAN.md`](./IMPLEMENTATION_PLAN.md) | 实施阶段、依赖、测试和发布门禁 | 已确认，尚未实施 |
+| [`IMPLEMENTATION_PLAN.md`](./IMPLEMENTATION_PLAN.md) | 实施阶段、依赖、测试和发布门禁 | 进行中 |
 
 ## 固定决策摘要
 
 - 产品为面向个人用户的微信待办小程序。
 - 前端使用微信原生框架和 TypeScript。
-- 后端使用阿里云函数计算和 Tablestore。
+- 后端当前部署路径为自建 Node.js HTTP 服务、PostgreSQL、nginx HTTPS。
 - UI 使用大留白、圆角卡片和清爽蓝主色。
-- 提醒采用微信订阅消息和每分钟调度。
+- 提醒采用微信订阅消息和进程内每分钟调度。
 - 重复任务生成独立实例，旧实例未完成不阻塞新实例。
 - 地图选点申请失败时降级为手动地点。
 - 离线可排队写操作，网络恢复后回放。
 - 注销后立即撤销访问，业务数据在 7 天内删除。
+- 早期确认的函数计算 / Tablestore 方案已由 ADR-011 修订。
 
 ## 文档变更规则
 
@@ -34,4 +35,5 @@
 
 ## 当前状态
 
-产品和技术讨论已经完成，但尚未开始业务代码、云资源或小程序页面实现。
+业务代码、小程序页面、PostgreSQL 适配器与自建部署样例已经落地。函数计算 /
+Tablestore 路径未继续实施，正式上线前仍需完成真机验收、限流告警与运维 hardening。

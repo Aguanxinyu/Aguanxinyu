@@ -2,12 +2,13 @@
 
 | 项目 | 内容 |
 | --- | --- |
-| 版本 | 1.0 |
-| 状态 | 已确认 |
+| 版本 | 1.1 |
+| 状态 | 已确认，含部署路径修订 |
 | 确认日期 | 2026-07-31 |
+| 修订日期 | 2026-08-21 |
 | 前端 | 微信原生小程序 + TypeScript |
-| 后端 | 阿里云 Serverless |
-| 数据库 | Tablestore |
+| 后端 | 自建 Node.js HTTP 服务（systemd） |
+| 数据库 | PostgreSQL |
 
 ## 1. 设计目标
 
@@ -46,12 +47,12 @@
 - 小程序只能请求已在后台配置的通信域名。
 - 请求域名必须使用 HTTPS，不能使用 IP 地址或 `localhost`。
 - 域名必须完成 ICP 备案。
-- 生产环境使用阿里云函数计算自定义域名，不使用函数计算默认测试域名。
+- 生产环境使用已备案 HTTPS 域名，经 nginx 反代到本机 Node 服务。
+- 不要将 IP 或 `localhost` 配置为微信合法请求域名。
 
 参考：
 
 - [微信小程序网络](https://developers.weixin.qq.com/miniprogram/dev/framework/ability/network.html)
-- [函数计算自定义域名](https://help.aliyun.com/zh/functioncompute/fc/configure-custom-domain-names)
 
 ### 2.4 地点接口
 
@@ -64,11 +65,9 @@
 
 参考：[`wx.chooseLocation`](https://developers.weixin.qq.com/miniprogram/dev/api/location/wx.chooseLocation.html)
 
-### 2.5 定时触发器
+### 2.5 定时调度
 
-阿里云函数计算定时触发器最小支持每分钟触发，可使用 `CRON_TZ=Asia/Shanghai` 指定业务时区。
-
-参考：[函数计算定时触发器](https://help.aliyun.com/zh/functioncompute/time-triggers)
+提醒扫描由后端进程内每分钟定时器执行；维护任务每小时执行一次，并在进程启动时立即跑一轮。业务日历固定为 `Asia/Shanghai`。
 
 ## 3. 总体架构
 
@@ -76,45 +75,41 @@
 微信原生小程序
        │ HTTPS
        ▼
-api.<已备案域名>
+todo.<已备案域名>
        │
-阿里云函数计算 HTTP 函数
+nginx（TLS 终止）
        │
-       ├── Tablestore：业务数据和调度数据
-       ├── KMS：微信 AppSecret、会话签名材料
-       ├── SLS：结构化日志、指标和告警
-       └── 微信开放接口
-
-阿里云函数计算定时函数
-       ├── reminder-ticker：每分钟提醒扫描
-       └── maintenance：重复实例、回收站、注销清理
+Node.js HTTP 服务（ApiService + Schedulers）
+       │
+       ├── PostgreSQL：业务数据和调度数据
+       └── 微信开放接口（code2Session / 订阅消息）
 ```
 
 ### 3.1 明确采用
 
 | 能力 | 选择 |
 | --- | --- |
-| API 接入 | 函数计算 HTTP 触发器 + 自定义域名 |
+| API 接入 | 自建 Node.js HTTP + nginx 自定义域名 |
 | 服务端语言 | TypeScript |
-| 数据存储 | Tablestore |
-| 提醒调度 | 每分钟定时扫描 |
+| 数据存储 | PostgreSQL |
+| 提醒调度 | 进程内每分钟扫描 |
 | 重复实例 | 滚动物化未来 60 天 |
-| 日志 | SLS |
-| 密钥 | KMS + RAM 服务角色 |
+| 日志 | 先结构化到标准输出，后续可接入集中日志 |
+| 密钥 | 服务器环境变量 / 受控密钥文件，不入库不入仓 |
 | 会话 | 服务端可撤销会话 |
-| 环境 | `dev`、`staging`、`prod` 独立资源 |
+| 环境 | `dev`、`staging`、`prod` 独立数据库与配置 |
 
 ### 3.2 首版不采用
 
+- 阿里云函数计算 HTTP / 定时触发器。
+- Tablestore。
 - API 网关。
-- NAT 网关。
 - Redis。
 - 消息队列。
 - OSS。
-- RDS 或 PolarDB。
-- 常驻应用服务器。
+- RDS 之外的第二套业务库。
 
-后续出现多后端路由、复杂 SQL 报表、团队协作或高并发关系查询时，再重新评估 API 网关和关系型数据库。
+后续若流量或运维模式变化，可重新评估 Serverless 与托管数据库方案。
 
 ## 4. 代码组织
 
@@ -122,22 +117,11 @@ api.<已备案域名>
 
 ```text
 miniprogram/
-  app/
-  pages/
-  components/
-  services/
-  stores/
-  utils/
-functions/
-  api/
-  reminder-ticker/
-  maintenance/
 packages/
   contracts/
   domain/
-  repositories/
-  wechat/
-infrastructure/
+  backend/
+deploy/
 tests/
 docs/
 ```
@@ -147,13 +131,10 @@ docs/
 - `miniprogram`：页面、组件、客户端状态、请求和缓存（含离线写回）。
 - `contracts`：请求、响应、领域类型和错误码的单一事实来源。
 - `domain`：状态迁移、重复规则、时间计算和配额规则等纯函数。
-- `repositories`：Tablestore SDK 的唯一访问出口。
-- `wechat`：`code2Session`、`access_token` 和订阅消息客户端。
-- `api`：HTTP 路由、鉴权、校验、用例编排和响应映射。
-- `reminder-ticker`：提醒扫描、认领、发送和结果记录。
-- `maintenance`：重复实例补齐、回收站清理和注销数据删除。
+- `backend`：HTTP 适配、API 用例、PostgreSQL 仓储、微信客户端和调度器。
+- `deploy`：systemd 与 nginx 样例配置。
 
-领域层不得依赖微信或阿里云 SDK。所有更新返回新对象，不原地修改共享状态。
+领域层不得依赖微信或云 SDK。所有更新返回新对象，不原地修改共享状态。
 
 ## 5. 数据模型
 
@@ -431,8 +412,7 @@ ACTIVE ──→ DELETION_PENDING ──→ DELETED
 ### 8.4 `access_token`
 
 - 函数实例内短期缓存微信 `access_token`。
-- 跨实例缓存放在 Tablestore 系统键值表中。
-- 使用条件写锁避免多个函数实例同时刷新。
+- 多进程部署时，可接受短暂重复刷新；后续如有需要再引入共享缓存。
 - 提前于过期时间刷新。
 
 ## 9. API 契约
@@ -564,7 +544,7 @@ Store 分为：
 ### 11.1 数据隔离
 
 - 仓储接口的第一个参数必须是 `userId`。
-- 所有 Tablestore 业务表以 `userId` 作为分区键或必要查询条件。
+- 所有业务表以 `user_id` 作为必要查询条件或复合主键组成部分。
 - 每个资源接口都必须有跨用户访问测试。
 
 ### 11.2 输入校验
@@ -583,9 +563,8 @@ Store 分为：
 
 ### 11.3 密钥
 
-- 微信 AppSecret 存放在 KMS。
-- 函数通过 RAM 服务角色获取临时云凭据。
-- 仓库和客户端中不得出现 AppSecret、AccessKey 或数据库凭据。
+- 微信 AppSecret 存放在服务器受控环境变量或密钥文件中。
+- 仓库和客户端中不得出现 AppSecret、数据库口令或会话明文。
 - 日志不得输出 Token、`openid`、`session_key` 或密钥。
 
 ### 11.4 日志脱敏
@@ -631,8 +610,7 @@ Store 分为：
 
 - API P50、P95、P99 延迟。
 - 4xx 和 5xx 比例。
-- 冷启动数量。
-- Tablestore 错误和限流。
+- PostgreSQL 错误和连接池耗尽。
 - 提醒调度延迟。
 - 提醒接受、送达、失败和跳过数量。
 - 重复实例生成数量和失败数量。
@@ -646,7 +624,7 @@ Store 分为：
 - 提醒调度延迟异常。
 - 微信 `access_token` 获取失败。
 - 每日维护任务未完成。
-- Tablestore 持续限流。
+- PostgreSQL 连接或磁盘异常。
 
 ## 13. 环境与部署
 
@@ -658,19 +636,17 @@ Store 分为：
 
 每个环境使用独立的：
 
-- 函数。
-- Tablestore 实例或隔离表前缀。
-- SLS Logstore。
-- KMS 凭据。
+- 服务器或进程配置。
+- PostgreSQL 数据库。
+- 环境变量与微信凭据。
 - 域名或路由。
 
 部署要求：
 
-- 基础设施通过 Serverless Devs 或 Terraform 管理。
-- 禁止依赖无法复现的控制台手工配置。
-- 函数发布使用版本和别名。
-- 上一函数版本必须可快速回滚。
-- 小程序体验版通过 `miniprogram-ci` 上传。
+- 使用 `deploy/today-todo.service` 与 `deploy/nginx-today-todo.conf` 作为基线。
+- 禁止把生产密钥提交到仓库。
+- 服务应可快速回滚到上一构建产物。
+- 小程序体验版通过开发者工具或 `miniprogram-ci` 上传。
 
 ## 14. 测试策略
 
@@ -693,7 +669,7 @@ Store 分为：
 ### 14.2 集成测试
 
 - 登录和会话轮换。
-- Tablestore 仓储。
+- PostgreSQL 仓储。
 - 写接口幂等。
 - 乐观锁冲突。
 - 所有资源的跨用户越权。
@@ -741,8 +717,8 @@ Store 分为：
 | 编号 | 决策 |
 | --- | --- |
 | ADR-001 | 使用微信原生小程序和 TypeScript |
-| ADR-002 | 使用函数计算 HTTP 触发器和自定义域名 |
-| ADR-003 | 使用 Tablestore，不使用关系型数据库 |
+| ADR-002 | 使用函数计算 HTTP 触发器和自定义域名（已被 ADR-011 取代） |
+| ADR-003 | 使用 Tablestore，不使用关系型数据库（已被 ADR-011 取代） |
 | ADR-004 | 使用可撤销的服务端会话 |
 | ADR-005 | 重复实例滚动物化未来 60 天 |
 | ADR-006 | 提醒采用每分钟扫描，接受约 9～10 分钟精度 |
@@ -750,3 +726,4 @@ Store 分为：
 | ADR-008 | 地图选点可降级为手动地点 |
 | ADR-009 | 离线可读取缓存，写操作排队并在网络恢复后回放 |
 | ADR-010 | 业务时区固定为 `Asia/Shanghai` |
+| ADR-011 | 部署路径修订为自建 Node.js + PostgreSQL + nginx HTTPS |
