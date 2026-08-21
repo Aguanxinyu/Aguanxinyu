@@ -464,7 +464,7 @@ ACTIVE ──→ DELETION_PENDING ──→ DELETED
 | `POST` | `/v1/tasks/{taskId}/uncomplete` | 撤销完成 |
 | `DELETE` | `/v1/tasks/{taskId}` | 移入回收站 |
 
-`GET /v1/tasks` 使用游标分页：`query.limit` 默认 50、上限 100；响应 `meta.cursor` 为下一页游标（keyset，排序键为 `dueAt → 优先级 → createdAt → id`），`meta.hasMore` 表示是否还有更多，末页不返回 `cursor`。
+`GET /v1/tasks` 使用游标分页：`query.limit` 默认 50、上限 100；响应 `meta.cursor` 为下一页游标（keyset，排序键为 `dueAt → 优先级 → createdAt → id`），`meta.hasMore` 表示是否还有更多，末页不返回 `cursor`。可选 `query.dueOn=YYYY-MM-DD`（Asia/Shanghai）只返回该日安排：匹配 `occurrenceDate` 或 `dueAt` 落在该日的任务；无日期任务仅在 `dueOn` 等于当天时返回。按日查询包含已完成项，仍排除回收站。
 
 微信 `wx.request` 不支持 `PATCH` 方法，编辑请求由前端以 `POST` + `X-HTTP-Method-Override: PATCH` 头发送；后端在 HTTP 边界还原为 PATCH 语义，路由和幂等键均按 PATCH 处理。
 
