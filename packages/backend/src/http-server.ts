@@ -38,8 +38,9 @@ function readBody(request: IncomingMessage, limitBytes: number): Promise<string>
     request.on('data', (chunk: Buffer) => {
       size += chunk.length;
       if (size > limitBytes) {
+        request.pause();
+        request.removeAllListeners('data');
         reject(new PayloadTooLargeError());
-        request.destroy();
         return;
       }
       chunks.push(chunk);
@@ -110,6 +111,7 @@ async function handleRequest(
   } catch (error) {
     if (error instanceof PayloadTooLargeError) {
       sendError(res, 413, 'PAYLOAD_TOO_LARGE', '请求体过大');
+      req.destroy();
       return;
     }
     options.logger?.(

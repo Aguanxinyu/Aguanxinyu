@@ -13,7 +13,7 @@ const { Pool } = pg;
 const REMINDER_INTERVAL_MS = 60_000;
 const MAINTENANCE_INTERVAL_MS = 60 * 60_000;
 const DEFAULT_PORT = 8080;
-const DEFAULT_REMINDER_PAGE = 'pages/index/index';
+const DEFAULT_REMINDER_PAGE = 'pages/todos/index';
 
 function env(name: string): string {
   return process.env[name] ?? '';

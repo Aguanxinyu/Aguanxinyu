@@ -23,9 +23,18 @@ export interface TemplateFieldValue {
 }
 
 function formatDueAt(dueAt: number): string {
-  const date = new Date(dueAt);
-  const pad = (value: number): string => String(value).padStart(2, '0');
-  return `${String(date.getFullYear())}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }).formatToParts(new Date(dueAt));
+  const lookup = (type: Intl.DateTimeFormatPartTypes): string =>
+    parts.find((part) => part.type === type)?.value ?? '';
+  return `${lookup('year')}-${lookup('month')}-${lookup('day')} ${lookup('hour')}:${lookup('minute')}`;
 }
 
 export function buildTemplateData(

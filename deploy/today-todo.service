@@ -9,7 +9,9 @@ Type=simple
 WorkingDirectory=/root/todo-app
 EnvironmentFile=/root/todo-app/.env
 ExecStart=/usr/bin/node /root/todo-app/packages/backend/dist/server.js
-# 如需降权运行：useradd -r -s /usr/sbin/nologin todo 后取消注释，并 chown -R todo:todo /root/todo-app
+# 如需降权运行：useradd -r -s /usr/sbin/nologin todo 后取消注释，
+# 并将 WorkingDirectory / EnvironmentFile / 证书目录改为 todo 用户可读写路径。
+# 生产环境不要长期以 root 运行本服务。
 # User=todo
 # Group=todo
 Restart=always
