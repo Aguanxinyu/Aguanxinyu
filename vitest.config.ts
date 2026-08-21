@@ -10,7 +10,14 @@ export default defineConfig({
         'functions/*/src/**/*.ts',
         'miniprogram/stores/todo-store.ts'
       ],
-      exclude: ['**/index.ts', '**/*.d.ts'],
+      exclude: [
+        '**/index.ts',
+        '**/*.d.ts',
+        // Process bootstrap and the Postgres adapter are validated by gated
+        // integration tests (`PG_TEST_DATABASE_URL`) rather than unit coverage.
+        'packages/backend/src/server.ts',
+        'packages/backend/src/postgres-database.ts'
+      ],
       reporter: ['text', 'lcov'],
       thresholds: {
         lines: 80,

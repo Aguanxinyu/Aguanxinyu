@@ -35,6 +35,7 @@
     "vitest": "^4.1.10"
   },
   "overrides": {
-    "protobufjs": "8.7.1"
+    "protobufjs": "8.7.1",
+    "nanoid": "3.3.18"
   }
 }

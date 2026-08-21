@@ -147,4 +147,18 @@ describe('HTTP server adapter', () => {
     });
     expect(response.status).toBe(400);
   });
+
+  it('rejects unsupported HTTP methods', async () => {
+    const response = await fetch(`${baseUrl}/v1/tasks`, { method: 'PUT' });
+    expect(response.status).toBe(405);
+  });
+
+  it('rejects oversized request bodies', async () => {
+    const response = await fetch(`${baseUrl}/v1/auth/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: 'x'.repeat(1024 * 1024 + 1)
+    });
+    expect(response.status).toBe(413);
+  });
 });
