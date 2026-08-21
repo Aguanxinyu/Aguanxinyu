@@ -4,6 +4,7 @@ import {
   type CreateTaskInput,
   type UpdateTaskInput
 } from '../services/api.js';
+import { dateKeyFromTimestamp, todayKey } from '../utils/calendar.js';
 import {
   acknowledgeMutation,
   appendTasks,
@@ -75,6 +76,16 @@ function replaceTask(state: TodoState, task: ClientTask): TodoState {
   };
 }
 
+function taskDayKey(task: ClientTask, now = Date.now()): string | null {
+  if (task.occurrenceDate !== undefined) {
+    return task.occurrenceDate;
+  }
+  if (task.dueAt !== undefined) {
+    return dateKeyFromTimestamp(task.dueAt);
+  }
+  return todayKey(now);
+}
+
 export class TodoController {
   private state: TodoState = createTodoState();
   private listeners: readonly Listener[] = [];
@@ -123,6 +134,25 @@ export class TodoController {
     }
   }
 
+  /** Fetch one Shanghai calendar day and merge into the local cache. */
+  public async refreshDay(dueOn: string): Promise<void> {
+    if (apiClient.getStoredToken() === null) {
+      await apiClient.login();
+    }
+    const page = await apiClient.listTasks({ dueOn });
+    const now = Date.now();
+    const kept = this.state.tasks.filter((task) => taskDayKey(task, now) !== dueOn);
+    const byId = new Map(kept.map((task) => [task.id, task] as const));
+    for (const task of page.tasks) {
+      byId.set(task.id, task);
+    }
+    this.publish({
+      ...this.state,
+      tasks: [...byId.values()],
+      syncedAt: now
+    });
+  }
+
   public async create(input: CreateTaskInput): Promise<ClientTask> {
     const task = await apiClient.createTask(input);
     this.publish({
@@ -136,7 +166,7 @@ export class TodoController {
     if (!this.state.hasMore || this.state.nextCursor === null) {
       return;
     }
-    const page = await apiClient.listTasks(this.state.nextCursor);
+    const page = await apiClient.listTasks({ cursor: this.state.nextCursor });
     this.publish(appendTasks(this.state, page.tasks, page.cursor, page.hasMore));
   }
 

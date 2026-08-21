@@ -76,7 +76,17 @@ Page({
     saving: false
   },
 
-  onLoad(options: { id?: string }) {
+  onLoad(options: { id?: string; date?: string }) {
+    const presetDate =
+      typeof options.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(options.date)
+        ? options.date
+        : today();
+    if (options.id === undefined) {
+      this.setData({
+        date: presetDate,
+        hasDueDate: typeof options.date === 'string'
+      });
+    }
     const taskId = options.id;
     if (taskId !== undefined && taskId.length > 0) {
       this.setData({ id: taskId });

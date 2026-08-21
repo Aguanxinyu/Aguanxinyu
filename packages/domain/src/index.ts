@@ -2,7 +2,9 @@ export { DomainError, type DomainErrorCode } from './errors.js';
 export {
   compareSortTuples,
   getTaskGroup,
+  shanghaiDateKey,
   sortTasks,
+  taskBelongsToDate,
   taskSortTuple,
   type TaskGroup,
   type TaskSortTuple

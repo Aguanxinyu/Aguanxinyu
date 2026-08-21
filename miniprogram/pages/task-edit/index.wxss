@@ -1,15 +1,15 @@
 .edit-page {
-  padding-top: 42rpx;
+  padding-top: 36rpx;
 }
 
 .form-card {
-  margin-top: 38rpx;
+  margin-top: 34rpx;
   padding: 0 28rpx;
 }
 
 .field {
   padding: 28rpx 0;
-  border-bottom: 1rpx solid #f1f5f9;
+  border-bottom: 1rpx solid var(--line);
 }
 
 .field:last-child {
@@ -25,7 +25,7 @@
 .label {
   display: block;
   margin-bottom: 16rpx;
-  color: #475569;
+  color: var(--ink-soft);
   font-size: 26rpx;
   font-weight: 600;
 }
@@ -37,7 +37,7 @@
 .field input,
 .field textarea {
   width: 100%;
-  color: #0f172a;
+  color: var(--ink);
   font-size: 30rpx;
 }
 
@@ -46,7 +46,7 @@
 }
 
 .picker-value {
-  color: #2563eb;
+  color: var(--accent-deep);
   font-size: 28rpx;
 }
 
@@ -54,14 +54,14 @@
   display: flex;
   gap: 18rpx;
   padding: 22rpx 0;
-  border-bottom: 1rpx solid #f1f5f9;
+  border-bottom: 1rpx solid var(--line);
 }
 
 .date-chip {
   padding: 14rpx 22rpx;
-  border-radius: 16rpx;
-  background: #eff6ff;
-  color: #2563eb;
+  border-radius: 8rpx;
+  background: var(--accent-soft);
+  color: var(--accent-deep);
   font-size: 26rpx;
 }
 
@@ -70,12 +70,12 @@
 }
 
 .picker-value--muted {
-  color: #94a3b8;
+  color: rgba(16, 36, 58, 0.35);
 }
 
 .repeat-hint {
   padding: 14rpx 0 2rpx;
-  color: #94a3b8;
+  color: rgba(16, 36, 58, 0.45);
   font-size: 24rpx;
 }
 
@@ -85,27 +85,28 @@
   z-index: 100;
   display: flex;
   align-items: flex-end;
-  background: rgba(15, 23, 42, 0.45);
+  background: rgba(16, 36, 58, 0.45);
 }
 
 .scope-dialog {
   width: 100%;
   box-sizing: border-box;
   padding: 36rpx 32rpx calc(24rpx + env(safe-area-inset-bottom));
-  border-radius: 28rpx 28rpx 0 0;
-  background: #ffffff;
+  border-radius: 18rpx 18rpx 0 0;
+  background: var(--card);
 }
 
 .scope-title {
-  color: #0f172a;
+  color: var(--ink);
+  font-family: 'Songti SC', 'STSong', serif;
   font-size: 32rpx;
-  font-weight: 600;
+  font-weight: 700;
   text-align: center;
 }
 
 .scope-body {
   margin-top: 16rpx;
-  color: #64748b;
+  color: var(--ink-soft);
   font-size: 26rpx;
   line-height: 1.6;
   text-align: center;
@@ -113,20 +114,20 @@
 
 .scope-action {
   margin-top: 28rpx;
-  border-radius: 20rpx;
-  background: #2563eb;
+  border-radius: 8rpx;
+  background: var(--accent);
   color: #ffffff;
   font-size: 30rpx;
 }
 
 .scope-action--disabled {
-  background: #e2e8f0;
-  color: #94a3b8;
+  background: var(--paper-deep);
+  color: rgba(16, 36, 58, 0.35);
 }
 
 .scope-cancel {
   margin-top: 24rpx;
-  color: #64748b;
+  color: var(--ink-soft);
   font-size: 28rpx;
   text-align: center;
 }

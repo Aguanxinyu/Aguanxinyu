@@ -7,7 +7,7 @@
   min-height: 108rpx;
   align-items: center;
   padding: 20rpx 24rpx;
-  border-bottom: 1rpx solid #f1f5f9;
+  border-bottom: 1rpx solid var(--line);
 }
 
 .trash-row:last-child {
@@ -22,7 +22,7 @@
 .trash-title {
   display: block;
   overflow: hidden;
-  color: #475569;
+  color: var(--ink-soft);
   font-size: 29rpx;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -31,7 +31,7 @@
 .trash-meta {
   display: block;
   margin-top: 8rpx;
-  color: #64748b;
+  color: rgba(16, 36, 58, 0.45);
   font-size: 24rpx;
 }
 

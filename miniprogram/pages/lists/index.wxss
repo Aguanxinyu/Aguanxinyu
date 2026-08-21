@@ -1,7 +1,7 @@
 .create-list {
   display: flex;
   align-items: center;
-  margin-top: 40rpx;
+  margin-top: 36rpx;
   padding: 18rpx 18rpx 18rpx 26rpx;
 }
 
@@ -25,7 +25,7 @@
   min-height: 106rpx;
   align-items: center;
   padding: 18rpx 24rpx;
-  border-bottom: 1rpx solid #f1f5f9;
+  border-bottom: 1rpx solid var(--line);
 }
 
 .list-row:last-child {
@@ -35,9 +35,10 @@
 .list-icon {
   width: 58rpx;
   height: 58rpx;
-  border-radius: 18rpx;
-  background: #eff6ff;
-  color: #2563eb;
+  border-radius: 8rpx;
+  background: var(--accent-soft);
+  color: var(--accent-deep);
+  font-family: 'Songti SC', 'STSong', serif;
   font-size: 24rpx;
   font-weight: 700;
   line-height: 58rpx;
@@ -56,9 +57,9 @@
   margin: 0;
   padding: 0;
   border: 0;
-  border-radius: 18rpx;
+  border-radius: 8rpx;
   background: transparent;
-  color: #475569;
+  color: var(--ink-soft);
   font-size: 34rpx;
   line-height: 66rpx;
 }

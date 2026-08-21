@@ -1,6 +1,6 @@
 <view class="page">
-  <view class="page-title">清单</view>
-  <view class="page-subtitle">按生活场景整理待办</view>
+  <view class="brand">今日待办</view>
+  <view class="page-subtitle">清单 · 按生活场景整理</view>
 
   <view class="card create-list">
     <input

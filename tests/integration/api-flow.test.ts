@@ -270,6 +270,70 @@ describe('authenticated todo API flow', () => {
     expect(new Set(ids).size).toBe(5);
   });
 
+  it('filters tasks by Shanghai dueOn day including completed items', async () => {
+    const system = createTestSystem({ now: Date.UTC(2026, 6, 31, 4) });
+    const user = await system.login('due-on-user');
+    const yesterday = Date.UTC(2026, 6, 29, 16); // 2026-07-30 00:00 Asia/Shanghai
+    const todayNoon = Date.UTC(2026, 6, 31, 4); // 2026-07-31 12:00 Asia/Shanghai
+
+    const past = await system.request({
+      method: 'POST',
+      path: '/v1/tasks',
+      token: user.token,
+      requestId: 'due-on-past',
+      body: {
+        title: '昨天的安排',
+        priority: 'MEDIUM',
+        dueAt: yesterday + 10 * 60 * 60 * 1000,
+        dueHasTime: true,
+        tagIds: []
+      }
+    });
+    expect(past.status).toBe(201);
+    const pastId = past.body.success ? past.body.data.id : '';
+
+    await system.request({
+      method: 'POST',
+      path: `/v1/tasks/${pastId}/complete`,
+      token: user.token,
+      requestId: 'due-on-complete'
+    });
+
+    await system.request({
+      method: 'POST',
+      path: '/v1/tasks',
+      token: user.token,
+      requestId: 'due-on-today',
+      body: {
+        title: '今天的安排',
+        priority: 'HIGH',
+        dueAt: todayNoon,
+        dueHasTime: true,
+        tagIds: []
+      }
+    });
+
+    const dayList = await system.request({
+      method: 'GET',
+      path: '/v1/tasks',
+      token: user.token,
+      query: { dueOn: '2026-07-30' }
+    });
+    expect(dayList.status).toBe(200);
+    expect(dayList.body.success && dayList.body.data.map((task) => task.title)).toEqual([
+      '昨天的安排'
+    ]);
+    expect(dayList.body.success && dayList.body.data[0]?.status).toBe('DONE');
+
+    const invalid = await system.request({
+      method: 'GET',
+      path: '/v1/tasks',
+      token: user.token,
+      query: { dueOn: '2026/07/30' }
+    });
+    expect(invalid.status).toBe(400);
+  });
+
   it('prevents one user from reading another user todo', async () => {
     const system = createTestSystem({ now: Date.UTC(2026, 6, 31, 4) });
     const alice = await system.login('alice');

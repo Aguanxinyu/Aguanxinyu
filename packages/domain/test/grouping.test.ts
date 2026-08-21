@@ -1,12 +1,27 @@
 import { describe, expect, it } from 'vitest';
 
-import { getTaskGroup, sortTasks } from '../src/grouping.js';
+import { getTaskGroup, shanghaiDateKey, sortTasks, taskBelongsToDate } from '../src/grouping.js';
 import { createTask } from './fixtures.js';
 
 describe('task grouping and sorting', () => {
   const now = Date.UTC(2026, 6, 31, 4);
   const todayStart = Date.UTC(2026, 6, 30, 16);
   const tomorrowStart = Date.UTC(2026, 6, 31, 16);
+
+  it('builds Asia/Shanghai date keys', () => {
+    expect(shanghaiDateKey(Date.parse('2026-08-20T16:30:00.000Z'))).toBe('2026-08-21');
+  });
+
+  it('matches tasks to a dueOn day including undated on today', () => {
+    expect(
+      taskBelongsToDate(createTask({ dueAt: todayStart + 10 * 60 * 60 * 1000 }), '2026-07-31', now)
+    ).toBe(true);
+    expect(taskBelongsToDate(createTask(), '2026-07-31', now)).toBe(true);
+    expect(taskBelongsToDate(createTask(), '2026-07-30', now)).toBe(false);
+    expect(
+      taskBelongsToDate(createTask({ occurrenceDate: '2026-07-30' }), '2026-07-30', now)
+    ).toBe(true);
+  });
 
   it.each([
     [todayStart - 1, 'OVERDUE'],

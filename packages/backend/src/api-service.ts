@@ -12,6 +12,7 @@ import {
   reminderTimeFor,
   restoreTask,
   sortTasks,
+  taskBelongsToDate,
   taskSortTuple,
   trashTask,
   uncompleteTask,
@@ -663,10 +664,22 @@ export class ApiService {
     user: UserRecord,
     query: HttpRequest['query']
   ): Promise<HttpResult<readonly Task[]>> {
+    const dueOnRaw = query?.dueOn;
+    const dueOn =
+      typeof dueOnRaw === 'string' && dueOnRaw.length > 0 ? dueOnRaw : undefined;
+    if (dueOn !== undefined && !DATE_PATTERN.test(dueOn)) {
+      return failure(400, 'INVALID_DUE_ON', 'dueOn 必须是 YYYY-MM-DD');
+    }
     const limit = parseLimit(query?.limit);
     const cursor = decodeCursor(query?.cursor);
+    const now = this.now();
     const tasks = sortTasks(
-      (await this.database.tasksForUser(user.id)).filter((task) => task.status !== 'TRASHED')
+      (await this.database.tasksForUser(user.id)).filter((task) => {
+        if (task.status === 'TRASHED') {
+          return false;
+        }
+        return dueOn === undefined || taskBelongsToDate(task, dueOn, now);
+      })
     );
     const startIndex =
       cursor === undefined

@@ -99,6 +99,11 @@ export interface TaskListResult {
   readonly hasMore: boolean;
 }
 
+export interface ListTasksOptions {
+  readonly cursor?: string;
+  readonly dueOn?: string;
+}
+
 export class ApiClientError extends Error {
   public readonly code: string;
 
@@ -169,11 +174,15 @@ export class ApiClient {
     return result;
   }
 
-  public async listTasks(cursor?: string): Promise<TaskListResult> {
-    const path =
-      cursor === undefined || cursor.length === 0
-        ? '/v1/tasks'
-        : `/v1/tasks?cursor=${encodeURIComponent(cursor)}`;
+  public async listTasks(options: ListTasksOptions = {}): Promise<TaskListResult> {
+    const params: string[] = [];
+    if (options.cursor !== undefined && options.cursor.length > 0) {
+      params.push(`cursor=${encodeURIComponent(options.cursor)}`);
+    }
+    if (options.dueOn !== undefined && options.dueOn.length > 0) {
+      params.push(`dueOn=${encodeURIComponent(options.dueOn)}`);
+    }
+    const path = params.length === 0 ? '/v1/tasks' : `/v1/tasks?${params.join('&')}`;
     const envelope = await this.requestEnvelope<readonly ClientTask[]>('GET', path);
     return {
       tasks: envelope.data,

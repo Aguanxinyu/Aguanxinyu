@@ -1,10 +1,14 @@
 <view class="page todo-page">
-  <view class="hero">
-    <view>
-      <text class="page-title">今日待办</text>
-      <view class="page-subtitle">{{dateLabel}}</view>
+  <view class="masthead">
+    <view class="masthead-copy">
+      <text class="brand">今日待办</text>
+      <view class="page-subtitle">{{daySubtitle}}</view>
+      <view class="day-line">
+        <text class="day-title">{{dayTitle}}</text>
+        <text class="day-count">{{loadingDay ? '同步中' : tasks.length + ' 项安排'}}</text>
+      </view>
     </view>
-    <button class="add-button" bindtap="onOpenEditor" aria-label="创建详细待办">＋</button>
+    <button class="add-button" bindtap="onOpenEditor" aria-label="创建详细待办">写</button>
   </view>
 
   <view
@@ -16,8 +20,7 @@
     {{pendingCount}} 项操作将在恢复网络后同步
   </view>
 
-  <view class="section-title">全部事项 · {{tasks.length}}</view>
-  <view class="card task-card">
+  <view class="task-list">
     <view
       wx:for="{{tasks}}"
       wx:key="id"
@@ -54,34 +57,83 @@
       </button>
     </view>
 
-    <view wx:if="{{tasks.length === 0}}" class="empty">
-      今天还没有待办，先写下第一件事
+    <view wx:if="{{tasks.length === 0 && !loadingDay}}" class="empty">
+      {{emptyLabel}}
     </view>
   </view>
 
   <view wx:if="{{tasks.length > 0}}" class="load-more">
     <text wx:if="{{loadingMore}}">加载中…</text>
-    <text wx:elif="{{hasMore}}">上拉加载更多</text>
-    <text wx:else>没有更多了</text>
+    <text wx:elif="{{hasMore && isSelectedToday}}">上拉加载更多</text>
+    <text wx:else>这一天就这些安排</text>
   </view>
 
-  <view class="quick-create card">
-    <input
-      value="{{quickTitle}}"
-      placeholder="快速记下一件事…"
-      maxlength="100"
-      confirm-type="done"
-      bindinput="onQuickInput"
-      bindconfirm="onQuickAdd"
-      aria-label="待办标题"
-    />
-    <button
-      class="quick-button"
-      loading="{{loading}}"
-      disabled="{{loading || !quickTitle}}"
-      bindtap="onQuickAdd"
-    >
-      添加
-    </button>
+  <view class="dock">
+    <view class="quick-create">
+      <input
+        value="{{quickTitle}}"
+        placeholder="记到这一天…"
+        maxlength="100"
+        confirm-type="done"
+        bindinput="onQuickInput"
+        bindconfirm="onQuickAdd"
+        aria-label="待办标题"
+      />
+      <button
+        class="quick-button"
+        loading="{{loading}}"
+        disabled="{{loading || !quickTitle}}"
+        bindtap="onQuickAdd"
+      >
+        添加
+      </button>
+    </view>
+
+    <view class="calendar-rail">
+      <view class="rail-head">
+        <text class="rail-title">按日查看</text>
+        <button class="rail-toggle" bindtap="onToggleCalendar" aria-label="展开或收起月历">
+          {{calendarOpen ? '收起月历' : '展开整月'}}
+        </button>
+      </view>
+      <scroll-view class="week-strip" scroll-x enable-flex>
+        <view
+          wx:for="{{weekDays}}"
+          wx:key="key"
+          class="week-day {{item.key === selectedDate ? 'week-day--active' : ''}} {{item.isToday ? 'week-day--today' : ''}}"
+          data-key="{{item.key}}"
+          bindtap="onSelectDay"
+        >
+          <text class="week-weekday">{{item.weekday}}</text>
+          <text class="week-number">{{item.label}}</text>
+        </view>
+      </scroll-view>
+    </view>
+  </view>
+
+  <view wx:if="{{calendarOpen}}" class="calendar-mask" bindtap="onCloseCalendar">
+    <view class="calendar-sheet" catchtap="noop">
+      <view class="sheet-handle" aria-hidden="true"></view>
+      <view class="sheet-head">
+        <button class="month-nav" data-delta="-1" bindtap="onShiftMonth" aria-label="上个月">‹</button>
+        <text class="sheet-title">{{monthTitle}}</text>
+        <button class="month-nav" data-delta="1" bindtap="onShiftMonth" aria-label="下个月">›</button>
+      </view>
+      <view class="weekday-row">
+        <text wx:for="{{weekdayLabels}}" wx:key="*this">{{item}}</text>
+      </view>
+      <view class="month-grid">
+        <view
+          wx:for="{{monthDays}}"
+          wx:key="key"
+          class="month-day {{item.inMonth ? '' : 'month-day--muted'}} {{item.key === selectedDate ? 'month-day--active' : ''}} {{item.isToday ? 'month-day--today' : ''}}"
+          data-key="{{item.key}}"
+          bindtap="onSelectDay"
+        >
+          {{item.label}}
+        </view>
+      </view>
+      <button class="ghost-button today-jump" bindtap="onJumpToday">回到今天</button>
+    </view>
   </view>
 </view>

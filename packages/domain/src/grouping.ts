@@ -14,6 +14,26 @@ function shanghaiDay(timestamp: number): number {
   return Math.floor((timestamp + SHANGHAI_OFFSET_MS) / DAY_MS);
 }
 
+/** YYYY-MM-DD in Asia/Shanghai for a UTC instant. */
+export function shanghaiDateKey(timestamp: number): string {
+  const shifted = new Date(timestamp + SHANGHAI_OFFSET_MS);
+  const year = shifted.getUTCFullYear();
+  const month = String(shifted.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(shifted.getUTCDate()).padStart(2, '0');
+  return `${String(year)}-${month}-${day}`;
+}
+
+/** Whether a task belongs on a Shanghai calendar day (including undated → today). */
+export function taskBelongsToDate(task: Task, dueOn: string, now: number): boolean {
+  if (task.occurrenceDate !== undefined) {
+    return task.occurrenceDate === dueOn;
+  }
+  if (task.dueAt !== undefined) {
+    return shanghaiDateKey(task.dueAt) === dueOn;
+  }
+  return dueOn === shanghaiDateKey(now);
+}
+
 export function getTaskGroup(task: Task, now: number): TaskGroup | null {
   if (task.status !== 'TODO') {
     return null;

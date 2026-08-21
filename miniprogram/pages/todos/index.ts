@@ -1,11 +1,25 @@
 import { ApiClientError } from '../../services/api.js';
 import { todoController } from '../../stores/todo-controller.js';
 import type { ClientTask, TodoState } from '../../stores/todo-store.js';
+import {
+  buildMonthGrid,
+  buildWeekStrip,
+  dateKeyFromTimestamp,
+  dayStartMs,
+  formatDaySubtitle,
+  formatDayTitle,
+  monthKeyFromDateKey,
+  monthTitle,
+  shiftDateKey,
+  todayKey,
+  type DayCell
+} from '../../utils/calendar.js';
 
 interface DisplayTask extends ClientTask {
   readonly dueLabel: string;
   readonly done: boolean;
   readonly priorityLabel: string;
+  readonly dayKey: string | null;
 }
 
 const PRIORITY_LABELS: Readonly<Record<ClientTask['priority'], string>> = {
@@ -14,17 +28,17 @@ const PRIORITY_LABELS: Readonly<Record<ClientTask['priority'], string>> = {
   LOW: '低'
 };
 
-function dateLabel(): string {
-  const date = new Date();
-  const weekday = '日一二三四五六'.charAt(date.getDay());
-  return `${String(date.getMonth() + 1)}月${String(date.getDate())}日 · 星期${weekday}`;
-}
+const WEEKDAY_LABELS = ['日', '一', '二', '三', '四', '五', '六'] as const;
 
 function displayTask(task: ClientTask): DisplayTask {
+  const dayKey =
+    task.occurrenceDate ??
+    (task.dueAt === undefined ? null : dateKeyFromTimestamp(task.dueAt));
   const dueLabel =
     task.dueAt === undefined
       ? '未设置时间'
       : new Date(task.dueAt).toLocaleString('zh-CN', {
+          timeZone: 'Asia/Shanghai',
           month: 'numeric',
           day: 'numeric',
           hour: task.dueHasTime ? '2-digit' : undefined,
@@ -34,7 +48,8 @@ function displayTask(task: ClientTask): DisplayTask {
     ...task,
     dueLabel,
     done: task.status === 'DONE',
-    priorityLabel: PRIORITY_LABELS[task.priority]
+    priorityLabel: PRIORITY_LABELS[task.priority],
+    dayKey
   };
 }
 
@@ -42,25 +57,93 @@ function messageFor(error: unknown): string {
   return error instanceof ApiClientError ? error.message : '操作失败，请稍后重试';
 }
 
+function calendarView(
+  selectedDate: string,
+  monthCursor: string,
+  now = Date.now()
+): {
+  readonly weekDays: readonly DayCell[];
+  readonly monthDays: readonly DayCell[];
+  readonly monthTitle: string;
+  readonly dayTitle: string;
+  readonly daySubtitle: string;
+  readonly isSelectedToday: boolean;
+} {
+  return {
+    weekDays: buildWeekStrip(selectedDate, now),
+    monthDays: buildMonthGrid(monthCursor, now),
+    monthTitle: monthTitle(monthCursor),
+    dayTitle: formatDayTitle(selectedDate, now),
+    daySubtitle: formatDaySubtitle(selectedDate),
+    isSelectedToday: selectedDate === todayKey(now)
+  };
+}
+
+function tasksForDay(
+  tasks: readonly ClientTask[],
+  selectedDate: string,
+  now = Date.now()
+): readonly DisplayTask[] {
+  const today = todayKey(now);
+  return tasks
+    .filter(({ status }) => status !== 'TRASHED')
+    .map(displayTask)
+    .filter((task) => {
+      if (task.dayKey === selectedDate) {
+        return true;
+      }
+      return task.dayKey === null && selectedDate === today;
+    });
+}
+
+function emptyLabelFor(selectedDate: string, now = Date.now()): string {
+  return selectedDate === todayKey(now)
+    ? '今天还没有安排，先写下第一件事'
+    : `${formatDayTitle(selectedDate, now)}没有记录的安排`;
+}
+
 let unsubscribe: (() => void) | undefined;
+let cachedTasks: readonly ClientTask[] = [];
+let dayLoadToken = 0;
 
 Page({
   data: {
-    dateLabel: dateLabel(),
+    selectedDate: todayKey(),
+    monthCursor: monthKeyFromDateKey(todayKey()),
+    calendarOpen: false,
+    weekdayLabels: WEEKDAY_LABELS,
+    weekDays: [] as readonly DayCell[],
+    monthDays: [] as readonly DayCell[],
+    monthTitle: '',
+    dayTitle: '今天',
+    daySubtitle: '',
+    isSelectedToday: true,
+    emptyLabel: '今天还没有安排，先写下第一件事',
     tasks: [] as readonly DisplayTask[],
     quickTitle: '',
     loading: false,
+    loadingDay: false,
     loadingMore: false,
     hasMore: false,
     pendingCount: 0
   },
 
   onLoad() {
+    const selectedDate = todayKey();
+    const monthCursor = monthKeyFromDateKey(selectedDate);
+    this.setData({
+      selectedDate,
+      monthCursor,
+      ...calendarView(selectedDate, monthCursor),
+      emptyLabel: emptyLabelFor(selectedDate)
+    });
     unsubscribe = todoController.subscribe((state: TodoState) => {
+      cachedTasks = state.tasks;
       this.setData({
-        tasks: state.tasks.filter(({ status }) => status !== 'TRASHED').map(displayTask),
+        tasks: tasksForDay(state.tasks, this.data.selectedDate),
         pendingCount: state.pendingMutations.length,
-        hasMore: state.hasMore
+        hasMore: state.hasMore,
+        emptyLabel: emptyLabelFor(this.data.selectedDate)
       });
     });
   },
@@ -70,11 +153,43 @@ Page({
     unsubscribe = undefined;
   },
 
+  onShow() {
+    const selectedDate = this.data.selectedDate;
+    const monthCursor = this.data.monthCursor;
+    this.setData(calendarView(selectedDate, monthCursor));
+    void this.loadSelectedDay(selectedDate);
+  },
+
+  async loadSelectedDay(selectedDate: string): Promise<void> {
+    const token = ++dayLoadToken;
+    this.setData({ loadingDay: true });
+    try {
+      if (selectedDate === todayKey()) {
+        await todoController.refresh();
+      } else {
+        await todoController.refreshDay(selectedDate);
+      }
+      if (token !== dayLoadToken) {
+        return;
+      }
+      this.setData({
+        tasks: tasksForDay(todoController.getState().tasks, selectedDate),
+        emptyLabel: emptyLabelFor(selectedDate)
+      });
+    } catch (error) {
+      if (token === dayLoadToken) {
+        void wx.showToast({ title: messageFor(error), icon: 'none' });
+      }
+    } finally {
+      if (token === dayLoadToken) {
+        this.setData({ loadingDay: false });
+      }
+    }
+  },
+
   async onPullDownRefresh() {
     try {
-      await todoController.refresh();
-    } catch (error) {
-      void wx.showToast({ title: messageFor(error), icon: 'none' });
+      await this.loadSelectedDay(this.data.selectedDate);
     } finally {
       void wx.stopPullDownRefresh();
     }
@@ -94,11 +209,12 @@ Page({
       await todoController.create({
         title,
         priority: 'MEDIUM',
+        dueAt: dayStartMs(this.data.selectedDate) + 18 * 60 * 60 * 1000,
         dueHasTime: false,
         tagIds: []
       });
       this.setData({ quickTitle: '' });
-      void wx.showToast({ title: '已添加', icon: 'success' });
+      void wx.showToast({ title: '已添加到这一天', icon: 'success' });
     } catch (error) {
       void wx.showToast({ title: messageFor(error), icon: 'none' });
     } finally {
@@ -129,7 +245,7 @@ Page({
   },
 
   async onReachBottom() {
-    if (this.data.loadingMore) {
+    if (this.data.loadingMore || this.data.selectedDate !== todayKey()) {
       return;
     }
     this.setData({ loadingMore: true });
@@ -158,6 +274,66 @@ Page({
   },
 
   onOpenEditor() {
-    void wx.navigateTo({ url: '/pages/task-edit/index' });
+    const date = this.data.selectedDate;
+    void wx.navigateTo({
+      url: `/pages/task-edit/index?date=${encodeURIComponent(date)}`
+    });
+  },
+
+  onToggleCalendar() {
+    this.setData({
+      calendarOpen: !this.data.calendarOpen,
+      monthCursor: monthKeyFromDateKey(this.data.selectedDate),
+      ...calendarView(this.data.selectedDate, monthKeyFromDateKey(this.data.selectedDate))
+    });
+  },
+
+  onCloseCalendar() {
+    this.setData({ calendarOpen: false });
+  },
+
+  noop() {},
+
+  onSelectDay(event: WechatMiniprogram.BaseEvent) {
+    const key = String(event.currentTarget.dataset.key ?? '');
+    if (key.length === 0 || key === this.data.selectedDate) {
+      this.setData({ calendarOpen: false });
+      return;
+    }
+    const monthCursor = monthKeyFromDateKey(key);
+    this.setData({
+      selectedDate: key,
+      monthCursor,
+      calendarOpen: false,
+      tasks: tasksForDay(cachedTasks, key),
+      emptyLabel: emptyLabelFor(key),
+      ...calendarView(key, monthCursor)
+    });
+    void this.loadSelectedDay(key);
+  },
+
+  onShiftMonth(event: WechatMiniprogram.BaseEvent) {
+    const delta = Number(event.currentTarget.dataset.delta ?? 0);
+    const nextMonth = shiftDateKey(this.data.monthCursor, delta * 32);
+    const monthCursor = monthKeyFromDateKey(nextMonth);
+    this.setData({
+      monthCursor,
+      monthDays: buildMonthGrid(monthCursor),
+      monthTitle: monthTitle(monthCursor)
+    });
+  },
+
+  onJumpToday() {
+    const key = todayKey();
+    const monthCursor = monthKeyFromDateKey(key);
+    this.setData({
+      selectedDate: key,
+      monthCursor,
+      calendarOpen: false,
+      tasks: tasksForDay(cachedTasks, key),
+      emptyLabel: emptyLabelFor(key),
+      ...calendarView(key, monthCursor)
+    });
+    void this.loadSelectedDay(key);
   }
 });

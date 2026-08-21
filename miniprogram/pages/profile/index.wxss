@@ -2,16 +2,17 @@
   display: flex;
   align-items: center;
   gap: 22rpx;
-  margin-top: 40rpx;
+  margin-top: 36rpx;
   padding: 30rpx;
 }
 
 .profile-mark {
   width: 86rpx;
   height: 86rpx;
-  border-radius: 28rpx;
-  background: #2563eb;
-  color: #ffffff;
+  border-radius: 8rpx;
+  background: var(--ink);
+  color: #f7f2e8;
+  font-family: 'Songti SC', 'STSong', serif;
   font-size: 38rpx;
   font-weight: 700;
   line-height: 86rpx;
@@ -19,13 +20,14 @@
 }
 
 .profile-name {
+  font-family: 'Songti SC', 'STSong', serif;
   font-size: 32rpx;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .profile-caption {
   margin-top: 8rpx;
-  color: #64748b;
+  color: var(--ink-soft);
   font-size: 24rpx;
 }
 
@@ -39,7 +41,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 0 28rpx;
-  border-bottom: 1rpx solid #f1f5f9;
+  border-bottom: 1rpx solid var(--line);
   font-size: 29rpx;
 }
 
@@ -48,17 +50,17 @@
 }
 
 .menu-hint {
-  color: #64748b;
+  color: var(--ink-soft);
   font-size: 26rpx;
 }
 
 .danger {
-  color: #dc2626;
+  color: var(--danger);
 }
 
 .privacy-note {
   padding: 48rpx 20rpx;
-  color: #64748b;
+  color: var(--ink-soft);
   font-size: 24rpx;
   line-height: 1.7;
   text-align: center;
