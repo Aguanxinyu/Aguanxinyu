@@ -665,8 +665,7 @@ export class ApiService {
     query: HttpRequest['query']
   ): Promise<HttpResult<readonly Task[]>> {
     const dueOnRaw = query?.dueOn;
-    const dueOn =
-      typeof dueOnRaw === 'string' && dueOnRaw.length > 0 ? dueOnRaw : undefined;
+    const dueOn = typeof dueOnRaw === 'string' && dueOnRaw.length > 0 ? dueOnRaw : undefined;
     if (dueOn !== undefined && !DATE_PATTERN.test(dueOn)) {
       return failure(400, 'INVALID_DUE_ON', 'dueOn 必须是 YYYY-MM-DD');
     }

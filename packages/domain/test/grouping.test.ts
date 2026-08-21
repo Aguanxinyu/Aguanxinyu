@@ -18,9 +18,9 @@ describe('task grouping and sorting', () => {
     ).toBe(true);
     expect(taskBelongsToDate(createTask(), '2026-07-31', now)).toBe(true);
     expect(taskBelongsToDate(createTask(), '2026-07-30', now)).toBe(false);
-    expect(
-      taskBelongsToDate(createTask({ occurrenceDate: '2026-07-30' }), '2026-07-30', now)
-    ).toBe(true);
+    expect(taskBelongsToDate(createTask({ occurrenceDate: '2026-07-30' }), '2026-07-30', now)).toBe(
+      true
+    );
   });
 
   it.each([

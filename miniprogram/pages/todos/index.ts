@@ -32,8 +32,7 @@ const WEEKDAY_LABELS = ['日', '一', '二', '三', '四', '五', '六'] as cons
 
 function displayTask(task: ClientTask): DisplayTask {
   const dayKey =
-    task.occurrenceDate ??
-    (task.dueAt === undefined ? null : dateKeyFromTimestamp(task.dueAt));
+    task.occurrenceDate ?? (task.dueAt === undefined ? null : dateKeyFromTimestamp(task.dueAt));
   const dueLabel =
     task.dueAt === undefined
       ? '未设置时间'

@@ -37,7 +37,10 @@ describe('calendar helpers', () => {
   });
 
   it('builds a month grid with leading and trailing days', () => {
-    const grid = buildMonthGrid(monthKeyFromDateKey('2026-08-21'), Date.parse('2026-08-21T12:00:00+08:00'));
+    const grid = buildMonthGrid(
+      monthKeyFromDateKey('2026-08-21'),
+      Date.parse('2026-08-21T12:00:00+08:00')
+    );
     expect(grid.length % 7).toBe(0);
     expect(grid.some((cell) => cell.key === '2026-08-01' && cell.inMonth)).toBe(true);
     expect(dayStartMs('2026-08-21')).toBe(Date.parse('2026-08-21T00:00:00+08:00'));

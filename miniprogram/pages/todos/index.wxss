@@ -187,8 +187,12 @@
   left: 0;
   z-index: 20;
   padding: 16rpx 20rpx calc(16rpx + env(safe-area-inset-bottom) + 110rpx);
-  background:
-    linear-gradient(180deg, rgba(243, 239, 230, 0) 0%, rgba(243, 239, 230, 0.92) 28%, #ebe4d6 100%);
+  background: linear-gradient(
+    180deg,
+    rgba(243, 239, 230, 0) 0%,
+    rgba(243, 239, 230, 0.92) 28%,
+    #ebe4d6 100%
+  );
 }
 
 .quick-create {

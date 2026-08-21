@@ -58,7 +58,11 @@ export function todayKey(now = Date.now()): string {
   return dateKeyFromTimestamp(now);
 }
 
-export function parseDateKey(key: string): { readonly year: number; readonly month: number; readonly day: number } {
+export function parseDateKey(key: string): {
+  readonly year: number;
+  readonly month: number;
+  readonly day: number;
+} {
   const [yearText, monthText, dayText] = key.split('-');
   return {
     year: Number(yearText),
