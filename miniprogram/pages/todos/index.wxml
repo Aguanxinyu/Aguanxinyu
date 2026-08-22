@@ -1,4 +1,4 @@
-<view class="page todo-page">
+<view class="page todo-page" style="padding-top: {{navPaddingTop}}px;">
   <view class="masthead">
     <view class="masthead-copy">
       <text class="brand">今日待办</text>
@@ -115,9 +115,9 @@
     <view class="calendar-sheet" catchtap="noop">
       <view class="sheet-handle" aria-hidden="true"></view>
       <view class="sheet-head">
-        <button class="month-nav" data-delta="-1" bindtap="onShiftMonth" aria-label="上个月">‹</button>
+        <button class="month-nav" size="mini" data-delta="-1" bindtap="onShiftMonth" aria-label="上个月">‹</button>
         <text class="sheet-title">{{monthTitle}}</text>
-        <button class="month-nav" data-delta="1" bindtap="onShiftMonth" aria-label="下个月">›</button>
+        <button class="month-nav" size="mini" data-delta="1" bindtap="onShiftMonth" aria-label="下个月">›</button>
       </view>
       <view class="weekday-row">
         <text wx:for="{{weekdayLabels}}" wx:key="*this">{{item}}</text>

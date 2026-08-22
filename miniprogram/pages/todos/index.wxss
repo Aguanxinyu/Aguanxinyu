@@ -1,5 +1,5 @@
 .todo-page {
-  padding-bottom: 380rpx;
+  padding-bottom: 340rpx;
 }
 
 .masthead {
@@ -186,7 +186,7 @@
   bottom: 0;
   left: 0;
   z-index: 20;
-  padding: 16rpx 20rpx calc(16rpx + env(safe-area-inset-bottom) + 110rpx);
+  padding: 16rpx 20rpx 12rpx;
   background: linear-gradient(
     180deg,
     rgba(243, 239, 230, 0) 0%,
@@ -308,7 +308,7 @@
 
 .calendar-sheet {
   width: 100%;
-  padding: 18rpx 28rpx calc(28rpx + env(safe-area-inset-bottom));
+  padding: 18rpx 28rpx 28rpx;
   border-radius: 18rpx 18rpx 0 0;
   background: #fffdf8;
 }
@@ -323,19 +323,28 @@
 
 .sheet-head {
   display: flex;
+  flex-wrap: nowrap;
   align-items: center;
   justify-content: space-between;
+  gap: 12rpx;
   margin-bottom: 18rpx;
 }
 
 .sheet-title {
+  flex: 1;
   font-family: 'Songti SC', 'STSong', serif;
   font-size: 32rpx;
   font-weight: 700;
+  line-height: 64rpx;
+  text-align: center;
+  white-space: nowrap;
 }
 
 .month-nav {
+  flex: 0 0 64rpx;
   width: 64rpx;
+  min-width: 64rpx;
+  max-width: 64rpx;
   height: 64rpx;
   margin: 0;
   padding: 0;

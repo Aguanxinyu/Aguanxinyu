@@ -14,6 +14,7 @@ import {
   todayKey,
   type DayCell
 } from '../../utils/calendar.js';
+import { getCustomNavInset } from '../../utils/layout.js';
 
 interface DisplayTask extends ClientTask {
   readonly dueLabel: string;
@@ -124,15 +125,18 @@ Page({
     loadingDay: false,
     loadingMore: false,
     hasMore: false,
-    pendingCount: 0
+    pendingCount: 0,
+    navPaddingTop: 88
   },
 
   onLoad() {
     const selectedDate = todayKey();
     const monthCursor = monthKeyFromDateKey(selectedDate);
+    const navPaddingTop = getCustomNavInset();
     this.setData({
       selectedDate,
       monthCursor,
+      navPaddingTop,
       ...calendarView(selectedDate, monthCursor),
       emptyLabel: emptyLabelFor(selectedDate)
     });

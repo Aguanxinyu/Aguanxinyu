@@ -1,5 +1,6 @@
 import { ApiClientError, apiClient } from '../../services/api.js';
 import { todoController } from '../../stores/todo-controller.js';
+import { getCustomNavInset } from '../../utils/layout.js';
 
 function messageFor(error: unknown): string {
   return error instanceof ApiClientError ? error.message : '操作失败，请稍后重试';
@@ -7,7 +8,12 @@ function messageFor(error: unknown): string {
 
 Page({
   data: {
-    syncing: false
+    syncing: false,
+    navPaddingTop: 88
+  },
+
+  onLoad() {
+    this.setData({ navPaddingTop: getCustomNavInset() });
   },
 
   onOpenTrash() {

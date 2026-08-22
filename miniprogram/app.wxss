@@ -28,7 +28,10 @@ page {
 .page {
   box-sizing: border-box;
   min-height: 100vh;
-  padding: 28rpx 28rpx 220rpx;
+  padding-top: calc(env(safe-area-inset-top) + 88rpx);
+  padding-right: 28rpx;
+  padding-bottom: 220rpx;
+  padding-left: 28rpx;
 }
 
 .brand {

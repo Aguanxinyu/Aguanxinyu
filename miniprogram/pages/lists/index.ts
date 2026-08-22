@@ -1,4 +1,5 @@
 import { ApiClientError, apiClient, type ClientList } from '../../services/api.js';
+import { getCustomNavInset } from '../../utils/layout.js';
 
 function messageFor(error: unknown): string {
   return error instanceof ApiClientError ? error.message : '操作失败，请稍后重试';
@@ -8,7 +9,12 @@ Page({
   data: {
     lists: [] as readonly ClientList[],
     newName: '',
-    loading: false
+    loading: false,
+    navPaddingTop: 88
+  },
+
+  onLoad() {
+    this.setData({ navPaddingTop: getCustomNavInset() });
   },
 
   onShow() {
