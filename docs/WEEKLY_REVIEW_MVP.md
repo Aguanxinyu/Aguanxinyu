@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 | --- | --- |
 | 版本 | 1.0 |
-| 状态 | 已确认（方案定稿，待实现） |
+| 状态 | 已确认；Phase 1 已实现（待真机 / LLM 联调） |
 | 确认日期 | 2026-08-25 |
 | 依赖 | [`PRD.md`](./PRD.md)、[`UI_SPEC.md`](./UI_SPEC.md)、[`TECHNICAL_DESIGN.md`](./TECHNICAL_DESIGN.md) |
 | 阶段 | Phase 1（MVP）；推送为 Phase 2 |
