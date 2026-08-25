@@ -2,13 +2,15 @@
 
 | 项目 | 内容 |
 | --- | --- |
-| 版本 | 1.1 |
-| 状态 | 已确认，含部署路径修订 |
+| 版本 | 1.2 |
+| 状态 | 已确认，含部署路径修订与周报 MVP 草案 |
 | 确认日期 | 2026-07-31 |
-| 修订日期 | 2026-08-21 |
+| 修订日期 | 2026-08-25 |
 | 前端 | 微信原生小程序 + TypeScript |
 | 后端 | 自建 Node.js HTTP 服务（systemd） |
 | 数据库 | PostgreSQL |
+
+周报 AI MVP 的产品门控与验收以 [`WEEKLY_REVIEW_MVP.md`](./WEEKLY_REVIEW_MVP.md) 为准；本章补充数据、接口与适配边界。
 
 ## 1. 设计目标
 
@@ -20,6 +22,7 @@
 - 无网络时不产生伪成功修改。
 - 注销后立即撤销访问，并在 7 天内删除业务数据。
 - 初期云资源保持低固定成本和低运维负担。
+- 周报生成以模型 API 为主路径，配置缺失时可降级，且遵守周日 19:00（上海）AI 门控。
 
 ## 2. 平台事实与风险
 
@@ -266,20 +269,37 @@ docs/
 
 ### 5.8 `idempotency`
 
-主键：
+| 字段 | 说明 |
+| --- | --- |
+| `user_id` | 用户 |
+| `scope` | 方法 + 路径 + requestId |
+| `response` | 已成功响应快照 |
+| `expire_at` | 过期时间 |
 
-- `userId`。
-- `requestId`。
+主键亦可理解为 `(userId, requestId)` 作用域。写接口使用客户端生成的请求 ID，防止网络重试导致重复创建。幂等窗口建议 24 小时。
 
-主要字段：
+### 5.9 `weekly_reviews`
 
-- 请求摘要。
-- 响应摘要。
-- `expiresAt`。
+周报 AI MVP 落库。产品门控见 [`WEEKLY_REVIEW_MVP.md`](./WEEKLY_REVIEW_MVP.md)。
 
-写接口使用客户端生成的请求 ID，防止网络重试导致重复创建。
+| 字段 | 说明 |
+| --- | --- |
+| `id` | 主键 |
+| `user_id` | 用户 |
+| `week_start` | 该周周一 `YYYY-MM-DD`（上海） |
+| `status` | `ready` / `failed` |
+| `source` | `model` / `rules` |
+| `stats` | JSON：完成/未完成/逾期/高优率/最忙日等 |
+| `summary` | 摘要文本 |
+| `improvements` | JSON 数组（type、severity、title、rationale、suggestion、taskIds） |
+| `highlights` | JSON 数组 |
+| `model` | 模型名，可空 |
+| `error_code` | 失败时可选 |
+| `created_at` / `updated_at` | 时间 |
 
-### 5.9 搜索索引
+唯一约束：`(user_id, week_start)`。重新生成覆盖。随账号注销删除。
+
+### 5.10 搜索索引
 
 任务搜索索引用于用户界面查询：
 
@@ -291,7 +311,7 @@ docs/
 - 优先级。
 - 更新时间。
 
-搜索索引可能存在短暂同步延迟，因此不能用于提醒调度、幂等判断或权限判断。
+搜索索引可能存在短暂同步延迟，因此不能用于提醒调度、幂等判断或权限判断。首版亦可使用 PostgreSQL 应用层过滤，不阻塞周报 MVP。
 
 ## 6. 状态机
 
@@ -502,6 +522,20 @@ ACTIVE ──→ DELETION_PENDING ──→ DELETED
 | `POST` | `/v1/account/deletion` | 发起注销 |
 | `POST` | `/v1/wechat/events` | 接收微信事件 |
 | `GET` | `/v1/health` | 存活检查 |
+
+### 9.7 本周回顾（周报 AI）
+
+完整门控与字段口径见 [`WEEKLY_REVIEW_MVP.md`](./WEEKLY_REVIEW_MVP.md)。
+
+| 方法 | 路径 | 用途 |
+| --- | --- | --- |
+| `GET` | `/v1/weekly-reviews/current` | 按默认落点返回周标识、`aiAllowed`、统计；若已有 review 一并返回 |
+| `GET` | `/v1/weekly-reviews` | `weekStart=YYYY-MM-DD` 查询指定周 |
+| `POST` | `/v1/weekly-reviews/generate` | body `{ weekStart }`；仅 `aiAllowed` 时允许；主路径调 LLM，否则规则降级 |
+
+业务错误码示例：`WEEKLY_REVIEW_AI_NOT_AVAILABLE`、`WEEKLY_REVIEW_RATE_LIMITED`、`WEEKLY_REVIEW_EMPTY`。
+
+LLM 适配：HTTP 客户端面向 OpenAI 兼容 `chat/completions`；配置 `LLM_API_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL`。无 Key 时不发起外呼。响应须 JSON Schema 校验；`taskIds` 必须属于该周事实集。日志记录用量与结果，不落完整备注明文。
 
 所有资源接口必须从已验证会话获取 `userId`，不能信任请求体或查询参数中的用户 ID。
 
@@ -727,3 +761,4 @@ Store 分为：
 | ADR-009 | 离线可读取缓存，写操作排队并在网络恢复后回放 |
 | ADR-010 | 业务时区固定为 `Asia/Shanghai` |
 | ADR-011 | 部署路径修订为自建 Node.js + PostgreSQL + nginx HTTPS |
+| ADR-012 | 周报 AI：自然周；周日 19:00 起可对本周调模型；主路径 OpenAI 兼容 API；无 Key/失败降级规则；备注送模；推送 Phase 2 |

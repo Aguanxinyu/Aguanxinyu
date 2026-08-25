@@ -441,7 +441,35 @@
 
 上线依赖、测试证据、隐私材料、监控和回滚路径全部完成。
 
-## 15. 提交拆分建议
+## 15. 阶段 13：本周回顾（周报 AI）MVP
+
+完整口径见 [`WEEKLY_REVIEW_MVP.md`](./WEEKLY_REVIEW_MVP.md)。本阶段在核心待办能力可用后实施。
+
+### 15.1 交付
+
+- `aiAllowed` 与周界工具函数（可注入 `now`）。
+- 周任务聚合与统计。
+- OpenAI 兼容 LLM 客户端 + JSON 校验。
+- 规则降级生成器。
+- `weekly_reviews` 表与 `GET/POST` 接口。
+- 小程序「我的」入口 + `pages/weekly-review`。
+- 配置项与限流。
+
+### 15.2 测试
+
+- `aiAllowed` 边界：周日 18:59 / 19:00、下周一 00:00。
+- 未开放周生成被拒绝；开放后模型/降级路径。
+- 伪造 `taskIds` 被拒绝或剥离。
+- 注销清理周报数据。
+
+### 15.3 门禁 G13
+
+- 文档口径与实现一致。
+- 无 Key 环境可完整走通统计 + 规则降级。
+- 有 Key 的 staging 至少一次真实模型生成成功（可人工触发）。
+- 日志无完整备注明文。
+
+## 16. 提交拆分建议
 
 实现开始后，每个逻辑阶段使用独立提交：
 
@@ -457,16 +485,19 @@
 10. `feat: add sync and read-only offline cache`
 11. `feat: add trash retention and account deletion`
 12. `chore: add observability security and release gates`
+13. `docs: lock weekly review AI MVP`
+14. `feat: add weekly review stats and AI generation`
 
 测试先行阶段保留 RED、GREEN 和必要的重构证据，具体提交粒度遵循仓库当时的 TDD 工作流。
 
-## 16. 实现启动条件
+## 17. 实现启动条件
 
 开始业务实现前至少需要：
 
 - 本文和相关产品、技术、页面文档保持已确认状态。
 - 明确开发使用的微信 AppID 和阿里云开发账号。
 - 真实密钥有安全注入方式。
+- 周报 Phase 1 另需国内 LLM 兼容 API 的测试密钥（可后置；无 Key 时先验收降级路径）。
 - 外部验证可以在隔离的开发环境执行。
 - 备案、模板和地点申请已启动，或明确接受开发与审批并行。
 
