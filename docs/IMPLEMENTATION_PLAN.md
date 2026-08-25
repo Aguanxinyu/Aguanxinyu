@@ -2,9 +2,10 @@
 
 | 项目 | 内容 |
 | --- | --- |
-| 版本 | 1.0 |
-| 状态 | 已确认，尚未开始实现 |
-| 依赖 | `PRD.md`、`TECHNICAL_DESIGN.md`、`UI_SPEC.md` |
+| 版本 | 1.1 |
+| 状态 | 核心能力进行中；周报 AI 文档已定稿待实现 |
+| 依赖 | `PRD.md`、`TECHNICAL_DESIGN.md`、`UI_SPEC.md`、`WEEKLY_REVIEW_MVP.md` |
+| 修订日期 | 2026-08-25 |
 
 ## 1. 实施原则
 
