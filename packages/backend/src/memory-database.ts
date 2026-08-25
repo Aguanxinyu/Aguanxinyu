@@ -12,6 +12,7 @@ import type {
   TodoTag,
   UserRecord
 } from './types.js';
+import type { WeeklyReviewRecord } from './weekly-review-types.js';
 
 interface IdempotencyRecord {
   readonly key: string;
@@ -29,6 +30,7 @@ interface Snapshot {
   readonly reminders: readonly ReminderRecord[];
   readonly reminderGrants: Readonly<Record<string, number>>;
   readonly idempotency: readonly IdempotencyRecord[];
+  readonly weeklyReviews: readonly WeeklyReviewRecord[];
 }
 
 const EMPTY_SNAPSHOT: Snapshot = {
@@ -40,7 +42,8 @@ const EMPTY_SNAPSHOT: Snapshot = {
   series: [],
   reminders: [],
   reminderGrants: {},
-  idempotency: []
+  idempotency: [],
+  weeklyReviews: []
 };
 
 function upsertById<T extends { readonly id: string }>(
@@ -359,7 +362,31 @@ export class MemoryDatabase implements BackendDatabase {
       idempotency: this.snapshot.idempotency.filter(({ key }) => !key.startsWith(`${userId}:`)),
       reminderGrants: Object.fromEntries(
         Object.entries(this.snapshot.reminderGrants).filter(([id]) => id !== userId)
+      ),
+      weeklyReviews: this.snapshot.weeklyReviews.filter((review) => review.userId !== userId)
+    };
+    return Promise.resolve();
+  }
+
+  public findWeeklyReview(
+    userId: string,
+    weekStart: string
+  ): Promise<WeeklyReviewRecord | undefined> {
+    return Promise.resolve(
+      this.snapshot.weeklyReviews.find(
+        (review) => review.userId === userId && review.weekStart === weekStart
       )
+    );
+  }
+
+  public saveWeeklyReview(review: WeeklyReviewRecord): Promise<void> {
+    const without = this.snapshot.weeklyReviews.filter(
+      (candidate) =>
+        !(candidate.userId === review.userId && candidate.weekStart === review.weekStart)
+    );
+    this.snapshot = {
+      ...this.snapshot,
+      weeklyReviews: [...without, review]
     };
     return Promise.resolve();
   }

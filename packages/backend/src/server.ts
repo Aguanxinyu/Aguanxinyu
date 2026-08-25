@@ -4,6 +4,7 @@ import pg from 'pg';
 
 import { ApiService } from './api-service.js';
 import { startServer } from './http-server.js';
+import { createOpenAiCompatibleLlmClient } from './llm-client.js';
 import { PostgresDatabase } from './postgres-database.js';
 import { Schedulers } from './schedulers.js';
 import { createWechatClient } from './wechat.js';
@@ -87,7 +88,24 @@ function main(): void {
     ? (code: string): Promise<string> => Promise.resolve(`openid:${code}`)
     : (code: string): Promise<string> => wechat.exchangeLoginCode(code);
 
-  const api = new ApiService({ database, now, exchangeLoginCode });
+  const llmApiKey = env('LLM_API_KEY');
+  const llmBaseUrl = env('LLM_API_BASE_URL');
+  const llmModel = env('LLM_MODEL') || 'deepseek-chat';
+  const generateWeeklyReviewWithLlm =
+    llmApiKey.length > 0 && llmBaseUrl.length > 0
+      ? createOpenAiCompatibleLlmClient({
+          baseUrl: llmBaseUrl,
+          apiKey: llmApiKey,
+          model: llmModel
+        })
+      : undefined;
+
+  const api = new ApiService({
+    database,
+    now,
+    exchangeLoginCode,
+    ...(generateWeeklyReviewWithLlm === undefined ? {} : { generateWeeklyReviewWithLlm })
+  });
   const schedulers = new Schedulers({
     database,
     api,
@@ -144,6 +162,9 @@ function main(): void {
   );
   console.log(
     `[start] reminders: ${reminderTemplateId.length > 0 ? 'configured' : 'NOT CONFIGURED'}`
+  );
+  console.log(
+    `[start] weekly review LLM: ${generateWeeklyReviewWithLlm !== undefined ? 'configured' : 'rules-only fallback'}`
   );
   console.log('[start] maintenance: 每小时 + 启动时');
 

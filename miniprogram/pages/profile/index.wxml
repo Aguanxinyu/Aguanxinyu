@@ -12,6 +12,10 @@
 
   <view class="section-title">数据</view>
   <view class="card menu-card">
+    <view class="menu-row" bindtap="onOpenWeeklyReview">
+      <text>本周回顾</text>
+      <text class="menu-hint">周报 ›</text>
+    </view>
     <view class="menu-row" bindtap="onSync">
       <text>立即同步</text>
       <text class="menu-hint" aria-live="polite">{{syncing ? '同步中…' : '›'}}</text>

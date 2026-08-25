@@ -10,6 +10,7 @@ import type {
   TodoTag,
   UserRecord
 } from './types.js';
+import type { WeeklyReviewRecord } from './weekly-review-types.js';
 
 export interface BackendDatabase {
   nextId(prefix: string): Promise<string>;
@@ -74,4 +75,7 @@ export interface BackendDatabase {
     result: HttpResult<ApiData>,
     expiresAt: number
   ): Promise<void>;
+
+  findWeeklyReview(userId: string, weekStart: string): Promise<WeeklyReviewRecord | undefined>;
+  saveWeeklyReview(review: WeeklyReviewRecord): Promise<void>;
 }

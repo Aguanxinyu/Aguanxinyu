@@ -16,7 +16,8 @@ export default defineConfig({
         // Process bootstrap and the Postgres adapter are validated by gated
         // integration tests (`PG_TEST_DATABASE_URL`) rather than unit coverage.
         'packages/backend/src/server.ts',
-        'packages/backend/src/postgres-database.ts'
+        'packages/backend/src/postgres-database.ts',
+        'packages/backend/src/llm-client.ts'
       ],
       reporter: ['text', 'lcov'],
       thresholds: {

@@ -16,10 +16,7 @@ type WechatRuntime = {
   readonly getMenuButtonBoundingClientRect?: () => MenuButtonBox;
 };
 
-export function computeCustomNavInset(
-  statusBarHeight: number,
-  menuButton: MenuButtonBox
-): number {
+export function computeCustomNavInset(statusBarHeight: number, menuButton: MenuButtonBox): number {
   const menuBottom = menuButton.bottom ?? menuButton.top + menuButton.height;
   return Math.max(menuBottom + 8, statusBarHeight + 12, 44);
 }

@@ -1,0 +1,91 @@
+<view class="page review-page" style="padding-top: {{navPaddingTop}}px;">
+  <view class="page-title">本周回顾</view>
+  <view class="page-subtitle">{{weekRangeLabel}}</view>
+
+  <view class="week-tabs">
+    <button
+      class="week-tab {{activeTab === 'current' ? 'week-tab--active' : ''}}"
+      data-tab="current"
+      bindtap="onSwitchTab"
+    >
+      本周
+    </button>
+    <button
+      class="week-tab {{activeTab === 'previous' ? 'week-tab--active' : ''}}"
+      data-tab="previous"
+      bindtap="onSwitchTab"
+    >
+      上周
+    </button>
+  </view>
+
+  <view class="section-title">概览 · {{weekTag}}</view>
+  <view class="card stats-card">
+    <view class="stats-grid">
+      <view class="stat">
+        <text class="stat-value">{{stats.total}}</text>
+        <text class="stat-label">安排</text>
+      </view>
+      <view class="stat">
+        <text class="stat-value">{{stats.completed}}</text>
+        <text class="stat-label">完成</text>
+      </view>
+      <view class="stat">
+        <text class="stat-value">{{stats.open}}</text>
+        <text class="stat-label">未完成</text>
+      </view>
+      <view class="stat">
+        <text class="stat-value">{{stats.overdueOpen}}</text>
+        <text class="stat-label">逾期</text>
+      </view>
+    </view>
+    <view class="stats-meta">
+      高优完成率 {{highPriorityRate}} · 最忙 {{busiestLabel}}
+    </view>
+  </view>
+
+  <view wx:if="{{!aiAllowed}}" class="card gate-card">
+    <view class="gate-title">本周 AI 周报尚未开放</view>
+    <view class="gate-body">周日 19:00（上海）后可生成本周摘要与改进建议。此前可查看统计，或切换到上周完整周报。</view>
+  </view>
+
+  <block wx:if="{{aiAllowed}}">
+    <view class="section-title">
+      AI 周报
+      <text wx:if="{{review}}" class="source-tag">{{sourceLabel}}</text>
+    </view>
+
+    <view wx:if="{{review}}" class="card review-card">
+      <view class="summary">{{review.summary}}</view>
+
+      <view wx:if="{{review.improvements.length > 0}}" class="block-title">需要改进</view>
+      <view
+        wx:for="{{review.improvements}}"
+        wx:key="title"
+        class="improve-row"
+        data-ids="{{item.taskIds}}"
+        bindtap="onOpenImprovement"
+      >
+        <view class="improve-title">{{item.title}}</view>
+        <view class="improve-body">{{item.rationale}}</view>
+        <view class="improve-suggest">建议：{{item.suggestion}}</view>
+      </view>
+
+      <view wx:if="{{review.highlights.length > 0}}" class="block-title">亮点</view>
+      <view wx:for="{{review.highlights}}" wx:key="title" class="highlight-row">
+        {{item.title}}
+      </view>
+    </view>
+
+    <button
+      class="primary-button generate-button"
+      loading="{{generating}}"
+      disabled="{{generating || stats.total === 0}}"
+      bindtap="onGenerate"
+    >
+      {{review ? '重新生成' : '生成周报'}}
+    </button>
+  </block>
+
+  <view wx:if="{{stats.total === 0}}" class="empty">这一周还没有记录的安排</view>
+</view>

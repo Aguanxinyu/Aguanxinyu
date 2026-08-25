@@ -17,6 +17,12 @@ export {
   type LoginResult,
   type TestSystemOptions
 } from './test-system.js';
+export {
+  createOpenAiCompatibleLlmClient,
+  type LlmClientOptions,
+  type LlmWeeklyContent
+} from './llm-client.js';
+export type { WeeklyReviewRecord, WeeklyReviewView } from './weekly-review-types.js';
 export type {
   AccountDeletionData,
   ApiData,

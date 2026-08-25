@@ -48,6 +48,39 @@ export interface ClientList {
   readonly isInbox: boolean;
 }
 
+export interface WeeklyReviewClientStats {
+  readonly total: number;
+  readonly completed: number;
+  readonly open: number;
+  readonly overdueOpen: number;
+  readonly highPriorityCompletionRate: number;
+  readonly busiestDay: string | null;
+  readonly busiestDayCount: number;
+}
+
+export interface WeeklyReviewClientRecord {
+  readonly summary: string;
+  readonly source: 'model' | 'rules';
+  readonly model?: string;
+  readonly improvements: readonly {
+    readonly title: string;
+    readonly rationale: string;
+    readonly suggestion: string;
+    readonly taskIds: readonly string[];
+  }[];
+  readonly highlights: readonly { readonly title: string }[];
+}
+
+export interface WeeklyReviewClientView {
+  readonly weekStart: string;
+  readonly weekEnd: string;
+  readonly label: 'current' | 'previous';
+  readonly aiAllowed: boolean;
+  readonly isCompleteWeek: boolean;
+  readonly stats: WeeklyReviewClientStats;
+  readonly review: WeeklyReviewClientRecord | null;
+}
+
 export interface CreateTaskInput {
   readonly title: string;
   readonly notes?: string;
@@ -257,6 +290,18 @@ export class ApiClient {
 
   public startAccountDeletion(): Promise<{ readonly purgeAfterAt: number }> {
     return this.request('POST', '/v1/account/deletion', undefined, true);
+  }
+
+  public getWeeklyReviewCurrent(): Promise<WeeklyReviewClientView> {
+    return this.request('GET', '/v1/weekly-reviews/current');
+  }
+
+  public getWeeklyReview(weekStart: string): Promise<WeeklyReviewClientView> {
+    return this.request('GET', `/v1/weekly-reviews?weekStart=${encodeURIComponent(weekStart)}`);
+  }
+
+  public generateWeeklyReview(weekStart: string): Promise<WeeklyReviewClientRecord> {
+    return this.request('POST', '/v1/weekly-reviews/generate', { weekStart }, true);
   }
 
   private request<T>(

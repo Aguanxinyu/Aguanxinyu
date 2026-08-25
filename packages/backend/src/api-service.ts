@@ -2,11 +2,16 @@ import { createHash, randomBytes } from 'node:crypto';
 
 import type { ApiMeta, RecurrenceRule, Task } from '@today-todo/contracts';
 import {
+  aiAllowed,
+  buildRulesReview,
+  buildWeeklyFacts,
   cancelReminder,
   compareSortTuples,
   completeTask,
   createReminderForTask,
+  defaultWeekStart,
   DomainError,
+  isValidWeekStart,
   occurrenceKey,
   reactivateReminder,
   reminderTimeFor,
@@ -19,11 +24,16 @@ import {
   validateListName,
   validateTagName,
   validateTaskInput,
-  type TaskSortTuple
+  weekEndDateKey,
+  weekEndExclusiveMs,
+  weekStartForInstant,
+  type TaskSortTuple,
+  type WeeklyReviewFacts
 } from '@today-todo/domain';
 import { z, ZodError } from 'zod';
 
 import type { BackendDatabase } from './database.js';
+import type { LlmWeeklyContent } from './llm-client.js';
 import { INBOX_LIST_ID } from './types.js';
 import type {
   ApiData,
@@ -37,12 +47,14 @@ import type {
   TodoTag,
   UserRecord
 } from './types.js';
+import type { WeeklyReviewRecord, WeeklyReviewView } from './weekly-review-types.js';
 
 const SESSION_LIFETIME_MS = 30 * 24 * 60 * 60 * 1000;
 const ACCOUNT_PURGE_DELAY_MS = 7 * 24 * 60 * 60 * 1000;
 const IDEMPOTENCY_LIFETIME_MS = 24 * 60 * 60 * 1000;
 const MAX_REMINDER_GRANTS = 20;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const MAX_WEEKLY_GENERATIONS = 5;
 
 const locationSchema = z.discriminatedUnion('source', [
   z.object({
@@ -211,17 +223,26 @@ export interface ApiServiceOptions {
   readonly database: BackendDatabase;
   readonly now: () => number;
   readonly exchangeLoginCode: (code: string) => Promise<string>;
+  readonly generateWeeklyReviewWithLlm?: (
+    facts: WeeklyReviewFacts
+  ) => Promise<LlmWeeklyContent | null>;
 }
 
 export class ApiService {
   private readonly database: BackendDatabase;
   private readonly now: () => number;
   private readonly exchangeLoginCode: (code: string) => Promise<string>;
+  private readonly generateWeeklyReviewWithLlm?: (
+    facts: WeeklyReviewFacts
+  ) => Promise<LlmWeeklyContent | null>;
 
   public constructor(options: ApiServiceOptions) {
     this.database = options.database;
     this.now = options.now;
     this.exchangeLoginCode = options.exchangeLoginCode;
+    if (options.generateWeeklyReviewWithLlm !== undefined) {
+      this.generateWeeklyReviewWithLlm = options.generateWeeklyReviewWithLlm;
+    }
   }
 
   public async handle(request: HttpRequest): Promise<HttpResult<ApiData>> {
@@ -356,6 +377,15 @@ export class ApiService {
     }
     if (request.method === 'POST' && request.path === '/v1/account/deletion') {
       return this.startAccountDeletion(user);
+    }
+    if (request.method === 'GET' && request.path === '/v1/weekly-reviews/current') {
+      return this.getCurrentWeeklyReview(user);
+    }
+    if (request.method === 'GET' && request.path === '/v1/weekly-reviews') {
+      return this.getWeeklyReview(user, request.query);
+    }
+    if (request.method === 'POST' && request.path === '/v1/weekly-reviews/generate') {
+      return this.generateWeeklyReview(user, request.body);
     }
 
     const listMatch = /^\/v1\/lists\/([^/]+)$/.exec(request.path);
@@ -809,6 +839,122 @@ export class ApiService {
     }
     await this.database.deleteTag(user.id, tagId);
     return success(204, null);
+  }
+
+  private async getCurrentWeeklyReview(user: UserRecord): Promise<HttpResult<WeeklyReviewView>> {
+    const now = this.now();
+    const weekStart = defaultWeekStart(now);
+    return this.buildWeeklyReviewView(user, weekStart, now);
+  }
+
+  private async getWeeklyReview(
+    user: UserRecord,
+    query: HttpRequest['query']
+  ): Promise<HttpResult<WeeklyReviewView>> {
+    const weekStart = query?.weekStart;
+    if (weekStart === undefined || !isValidWeekStart(weekStart)) {
+      return failure(400, 'INVALID_WEEK_START', 'weekStart 必须是周一的 YYYY-MM-DD');
+    }
+    return this.buildWeeklyReviewView(user, weekStart, this.now());
+  }
+
+  private async buildWeeklyReviewView(
+    user: UserRecord,
+    weekStart: string,
+    now: number
+  ): Promise<HttpResult<WeeklyReviewView>> {
+    const facts = await this.collectWeeklyFacts(user, weekStart, now);
+    const review = (await this.database.findWeeklyReview(user.id, weekStart)) ?? null;
+    const currentWeek = weekStartForInstant(now);
+    return success(200, {
+      weekStart,
+      weekEnd: weekEndDateKey(weekStart),
+      label: weekStart === currentWeek ? 'current' : 'previous',
+      aiAllowed: aiAllowed(weekStart, now),
+      isCompleteWeek: now >= weekEndExclusiveMs(weekStart),
+      stats: facts.stats,
+      review
+    });
+  }
+
+  private async collectWeeklyFacts(
+    user: UserRecord,
+    weekStart: string,
+    now: number
+  ): Promise<WeeklyReviewFacts> {
+    const [tasks, lists] = await Promise.all([
+      this.database.tasksForUser(user.id),
+      this.database.listsForUser(user.id)
+    ]);
+    const listNames: Record<string, string> = {};
+    for (const list of lists) {
+      listNames[list.id] = list.name;
+    }
+    return buildWeeklyFacts({ weekStart, now, tasks, listNames });
+  }
+
+  private async generateWeeklyReview(
+    user: UserRecord,
+    body: unknown
+  ): Promise<HttpResult<WeeklyReviewRecord>> {
+    const input = z.object({ weekStart: z.string() }).parse(body);
+    if (!isValidWeekStart(input.weekStart)) {
+      return failure(400, 'INVALID_WEEK_START', 'weekStart 必须是周一的 YYYY-MM-DD');
+    }
+    const now = this.now();
+    if (!aiAllowed(input.weekStart, now)) {
+      return failure(
+        403,
+        'WEEKLY_REVIEW_AI_NOT_AVAILABLE',
+        '本周周报将在周日 19:00 后生成，已结束的周可随时生成'
+      );
+    }
+
+    const existing = await this.database.findWeeklyReview(user.id, input.weekStart);
+    if (existing !== undefined && existing.generationCount >= MAX_WEEKLY_GENERATIONS) {
+      return failure(429, 'WEEKLY_REVIEW_RATE_LIMITED', '本周生成次数已达上限，请下周再试');
+    }
+
+    const facts = await this.collectWeeklyFacts(user, input.weekStart, now);
+    if (facts.stats.total === 0) {
+      return failure(400, 'WEEKLY_REVIEW_EMPTY', '这一周还没有记录的安排');
+    }
+
+    let source: WeeklyReviewRecord['source'] = 'rules';
+    let model: string | undefined;
+    const rules = buildRulesReview(facts);
+    let summary = rules.summary;
+    let improvements = rules.improvements;
+    let highlights = rules.highlights;
+
+    if (this.generateWeeklyReviewWithLlm !== undefined) {
+      const llm = await this.generateWeeklyReviewWithLlm(facts);
+      if (llm !== null) {
+        source = 'model';
+        model = llm.model;
+        summary = llm.summary;
+        improvements = llm.improvements;
+        highlights = llm.highlights;
+      }
+    }
+
+    const review: WeeklyReviewRecord = {
+      id: existing?.id ?? (await this.database.nextId('weekly')),
+      userId: user.id,
+      weekStart: input.weekStart,
+      status: 'ready',
+      source,
+      stats: facts.stats,
+      summary,
+      improvements,
+      highlights,
+      ...(model === undefined ? {} : { model }),
+      generationCount: (existing?.generationCount ?? 0) + 1,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now
+    };
+    await this.database.saveWeeklyReview(review);
+    return success(200, review);
   }
 
   private async startAccountDeletion(

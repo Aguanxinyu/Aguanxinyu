@@ -1,0 +1,128 @@
+.review-page {
+  padding-bottom: 80rpx;
+}
+
+.week-tabs {
+  display: flex;
+  gap: 12rpx;
+  margin-top: 28rpx;
+}
+
+.week-tab {
+  flex: 1;
+  height: 68rpx;
+  margin: 0;
+  padding: 0;
+  border: 1rpx solid var(--line);
+  border-radius: 8rpx;
+  background: rgba(255, 253, 248, 0.8);
+  color: var(--ink-soft);
+  font-size: 26rpx;
+  line-height: 68rpx;
+}
+
+.week-tab--active {
+  background: var(--ink);
+  color: #f7f2e8;
+  border-color: var(--ink);
+}
+
+.week-tab::after {
+  border: 0;
+}
+
+.stats-card,
+.gate-card,
+.review-card {
+  margin-top: 8rpx;
+  padding: 28rpx;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12rpx;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.stat-value {
+  font-family: 'Songti SC', 'STSong', serif;
+  font-size: 36rpx;
+  font-weight: 700;
+}
+
+.stat-label {
+  margin-top: 6rpx;
+  color: var(--ink-soft);
+  font-size: 22rpx;
+}
+
+.stats-meta {
+  margin-top: 22rpx;
+  color: var(--ink-soft);
+  font-size: 24rpx;
+  text-align: center;
+}
+
+.gate-title,
+.block-title {
+  font-family: 'Songti SC', 'STSong', serif;
+  font-size: 30rpx;
+  font-weight: 700;
+}
+
+.gate-body {
+  margin-top: 12rpx;
+  color: var(--ink-soft);
+  font-size: 26rpx;
+  line-height: 1.6;
+}
+
+.source-tag {
+  margin-left: 12rpx;
+  color: var(--accent-deep);
+  font-size: 22rpx;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.summary {
+  font-size: 28rpx;
+  line-height: 1.7;
+}
+
+.block-title {
+  margin-top: 28rpx;
+  margin-bottom: 12rpx;
+}
+
+.improve-row {
+  padding: 18rpx 0;
+  border-top: 1rpx solid var(--line);
+}
+
+.improve-title {
+  font-size: 28rpx;
+  font-weight: 600;
+}
+
+.improve-body,
+.improve-suggest,
+.highlight-row {
+  margin-top: 8rpx;
+  color: var(--ink-soft);
+  font-size: 24rpx;
+  line-height: 1.5;
+}
+
+.generate-button {
+  margin-top: 28rpx;
+  height: 84rpx;
+  line-height: 84rpx;
+}

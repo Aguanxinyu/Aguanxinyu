@@ -4,7 +4,8 @@
     "pages/lists/index",
     "pages/profile/index",
     "pages/task-edit/index",
-    "pages/trash/index"
+    "pages/trash/index",
+    "pages/weekly-review/index"
   ],
   "window": {
     "navigationBarTitleText": "今日待办",

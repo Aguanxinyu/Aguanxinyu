@@ -25,3 +25,25 @@ export {
   type ValidationIssue,
   type ValidationResult
 } from './validation.js';
+export {
+  aiAllowed,
+  buildRulesReview,
+  buildWeeklyFacts,
+  defaultWeekStart,
+  isValidWeekStart,
+  previousWeekStart,
+  sanitizeImprovements,
+  taskBelongsToWeek,
+  weekEndDateKey,
+  weekEndExclusiveMs,
+  weekStartForInstant,
+  weekStartMs,
+  type ImprovementSeverity,
+  type ImprovementType,
+  type ListStat,
+  type WeeklyHighlight,
+  type WeeklyImprovement,
+  type WeeklyReviewFacts,
+  type WeeklyStats,
+  type WeeklyTaskFact
+} from './weekly-review.js';

@@ -1,7 +1,9 @@
 import type { Task } from '@today-todo/contracts';
+import type { WeeklyReviewFacts } from '@today-todo/domain';
 
 import { ApiService } from './api-service.js';
 import type { BackendDatabase } from './database.js';
+import type { LlmWeeklyContent } from './llm-client.js';
 import { MemoryDatabase } from './memory-database.js';
 import { Schedulers } from './schedulers.js';
 import type {
@@ -14,6 +16,7 @@ import type {
   TodoList,
   TodoTag
 } from './types.js';
+import type { WeeklyReviewRecord, WeeklyReviewView } from './weekly-review-types.js';
 
 type ResponseData<R extends HttpRequest> = R extends {
   readonly method: 'POST';
@@ -68,12 +71,25 @@ type ResponseData<R extends HttpRequest> = R extends {
                         readonly path: '/v1/account/deletion';
                       }
                     ? AccountDeletionData
-                    : null;
+                    : R extends {
+                          readonly method: 'GET';
+                          readonly path: '/v1/weekly-reviews' | '/v1/weekly-reviews/current';
+                        }
+                      ? WeeklyReviewView
+                      : R extends {
+                            readonly method: 'POST';
+                            readonly path: '/v1/weekly-reviews/generate';
+                          }
+                        ? WeeklyReviewRecord
+                        : null;
 
 export interface TestSystemOptions {
   readonly now: number;
   readonly sendShouldFail?: boolean;
   readonly database?: BackendDatabase;
+  readonly generateWeeklyReviewWithLlm?: (
+    facts: WeeklyReviewFacts
+  ) => Promise<LlmWeeklyContent | null>;
 }
 
 export interface LoginResult {
@@ -96,7 +112,10 @@ export class TestSystem {
     this.api = new ApiService({
       database,
       now: () => this.currentTime,
-      exchangeLoginCode: (code) => Promise.resolve(`openid:${code}`)
+      exchangeLoginCode: (code) => Promise.resolve(`openid:${code}`),
+      ...(options.generateWeeklyReviewWithLlm === undefined
+        ? {}
+        : { generateWeeklyReviewWithLlm: options.generateWeeklyReviewWithLlm })
     });
     this.schedulers = new Schedulers({
       database,

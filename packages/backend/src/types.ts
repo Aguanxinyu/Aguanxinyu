@@ -1,5 +1,7 @@
 import type { ApiResponse, RecurrenceRule, Reminder, Task } from '@today-todo/contracts';
 
+import type { WeeklyReviewRecord, WeeklyReviewView } from './weekly-review-types.js';
+
 export const INBOX_LIST_ID = 'inbox';
 
 export type HttpMethod = 'DELETE' | 'GET' | 'PATCH' | 'POST';
@@ -111,6 +113,8 @@ export type ApiData =
   | Task
   | TodoList
   | TodoTag
+  | WeeklyReviewView
+  | WeeklyReviewRecord
   | readonly Task[]
   | readonly TodoList[]
   | readonly TodoTag[]

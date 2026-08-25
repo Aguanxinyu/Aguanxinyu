@@ -14,6 +14,7 @@ import {
   type TodoTag,
   type UserRecord
 } from './types.js';
+import type { WeeklyReviewRecord } from './weekly-review-types.js';
 
 // pg returns BIGINT columns as strings unless a type parser is registered.
 pg.types.setTypeParser(20, (value) => parseInt(value, 10));
@@ -274,6 +275,7 @@ export class PostgresDatabase implements BackendDatabase {
       await client.query('DELETE FROM reminders WHERE user_id = $1', [userId]);
       await client.query('DELETE FROM reminder_grants WHERE user_id = $1', [userId]);
       await client.query('DELETE FROM idempotency WHERE user_id = $1', [userId]);
+      await client.query('DELETE FROM weekly_reviews WHERE user_id = $1', [userId]);
       await client.query('COMMIT');
     } catch (error) {
       await client.query('ROLLBACK');
@@ -611,6 +613,88 @@ export class PostgresDatabase implements BackendDatabase {
       `INSERT INTO idempotency (user_id, scope, result, expires_at) VALUES ($1, $2, $3, $4)
        ON CONFLICT (user_id, scope) DO UPDATE SET result = EXCLUDED.result, expires_at = EXCLUDED.expires_at`,
       [userId, scope, result, expiresAt]
+    );
+  }
+
+  public async findWeeklyReview(
+    userId: string,
+    weekStart: string
+  ): Promise<WeeklyReviewRecord | undefined> {
+    const result = await this.pool.query<{
+      id: string;
+      user_id: string;
+      week_start: string;
+      status: WeeklyReviewRecord['status'];
+      source: WeeklyReviewRecord['source'];
+      stats: WeeklyReviewRecord['stats'];
+      summary: string;
+      improvements: WeeklyReviewRecord['improvements'];
+      highlights: WeeklyReviewRecord['highlights'];
+      model: string | null;
+      error_code: string | null;
+      generation_count: number;
+      created_at: number;
+      updated_at: number;
+    }>('SELECT * FROM weekly_reviews WHERE user_id = $1 AND week_start = $2 LIMIT 1', [
+      userId,
+      weekStart
+    ]);
+    const row = result.rows[0];
+    if (row === undefined) {
+      return undefined;
+    }
+    return {
+      id: row.id,
+      userId: row.user_id,
+      weekStart: row.week_start,
+      status: row.status,
+      source: row.source,
+      stats: row.stats,
+      summary: row.summary,
+      improvements: row.improvements,
+      highlights: row.highlights,
+      ...(row.model === null ? {} : { model: row.model }),
+      ...(row.error_code === null ? {} : { errorCode: row.error_code }),
+      generationCount: row.generation_count,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    };
+  }
+
+  public async saveWeeklyReview(review: WeeklyReviewRecord): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO weekly_reviews (
+         id, user_id, week_start, status, source, stats, summary, improvements, highlights,
+         model, error_code, generation_count, created_at, updated_at
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+       ON CONFLICT (user_id, week_start) DO UPDATE SET
+         id = EXCLUDED.id,
+         status = EXCLUDED.status,
+         source = EXCLUDED.source,
+         stats = EXCLUDED.stats,
+         summary = EXCLUDED.summary,
+         improvements = EXCLUDED.improvements,
+         highlights = EXCLUDED.highlights,
+         model = EXCLUDED.model,
+         error_code = EXCLUDED.error_code,
+         generation_count = EXCLUDED.generation_count,
+         updated_at = EXCLUDED.updated_at`,
+      [
+        review.id,
+        review.userId,
+        review.weekStart,
+        review.status,
+        review.source,
+        JSON.stringify(review.stats),
+        review.summary,
+        JSON.stringify(review.improvements),
+        JSON.stringify(review.highlights),
+        review.model ?? null,
+        review.errorCode ?? null,
+        review.generationCount,
+        review.createdAt,
+        review.updatedAt
+      ]
     );
   }
 }

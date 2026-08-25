@@ -20,6 +20,10 @@ Page({
     void wx.navigateTo({ url: '/pages/trash/index' });
   },
 
+  onOpenWeeklyReview() {
+    void wx.navigateTo({ url: '/pages/weekly-review/index' });
+  },
+
   async onSync() {
     this.setData({ syncing: true });
     try {
