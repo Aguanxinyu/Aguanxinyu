@@ -8,7 +8,7 @@
 | --- | --- | --- |
 | [`PRD.md`](./PRD.md) | 产品目标、范围、规则和验收标准 | 已确认（1.2 含 Web 客户端增量） |
 | [`WEEKLY_REVIEW_MVP.md`](./WEEKLY_REVIEW_MVP.md) | **本周回顾（周报 AI）MVP 完整口径** | 已确认；实现已合入主开发线 |
-| [`WEB_CLIENT_MVP.md`](./WEB_CLIENT_MVP.md) | **浏览器 Web 客户端 MVP 完整口径** | 已确认，待实现 |
+| [`WEB_CLIENT_MVP.md`](./WEB_CLIENT_MVP.md) | **浏览器 Web 客户端 MVP 完整口径** | 已确认；Phase 1 实现已落地 |
 | [`TECHNICAL_DESIGN.md`](./TECHNICAL_DESIGN.md) | 自建 Node + PostgreSQL 架构、数据、接口、安全和测试 | 已确认，含多端登录与 Web SPA |
 | [`UI_SPEC.md`](./UI_SPEC.md) | 页面结构、交互、视觉令牌和状态设计 | 已确认（含回顾页；Web 令牌复用） |
 | [`IMPLEMENTATION_PLAN.md`](./IMPLEMENTATION_PLAN.md) | 实施阶段、依赖、测试和发布门禁 | 进行中（含阶段 13、14） |
@@ -39,4 +39,4 @@
 
 ## 当前状态
 
-业务代码、小程序页面、PostgreSQL 适配器、周报 AI MVP 与自建部署样例已经落地。Web 客户端已完成 MVP 文档定稿，实现尚未开始。正式上线前仍需完成真机验收、限流告警与运维 hardening；Web 另需完成开放平台网站应用与 `unionid` 绑定。
+业务代码、小程序页面、PostgreSQL 适配器、周报 AI MVP、Web 客户端 SPA 与自建部署样例已经落地。正式上线前仍需完成真机验收、限流告警与运维 hardening；Web 另需完成开放平台网站应用与 `unionid` 绑定后的扫码联调。

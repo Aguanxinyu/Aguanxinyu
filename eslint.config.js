@@ -15,7 +15,8 @@ export default tseslint.config(
           './packages/contracts/tsconfig.json',
           './packages/domain/tsconfig.json',
           './packages/backend/tsconfig.json',
-          './miniprogram/tsconfig.json'
+          './miniprogram/tsconfig.json',
+          './web/tsconfig.json'
         ],
         tsconfigRootDir: import.meta.dirname
       }
@@ -23,6 +24,10 @@ export default tseslint.config(
     rules: {
       '@typescript-eslint/consistent-type-imports': 'error'
     }
+  },
+  {
+    files: ['web/vite.config.ts'],
+    ...tseslint.configs.disableTypeChecked
   },
   {
     files: ['**/*.js'],

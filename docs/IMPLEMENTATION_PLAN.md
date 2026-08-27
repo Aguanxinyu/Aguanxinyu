@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 | --- | --- |
 | 版本 | 1.2 |
-| 状态 | 核心能力与周报 AI 已落地；Web 客户端文档已定稿待实现 |
+| 状态 | 核心能力、周报 AI 与 Web 客户端 MVP 已落地 |
 | 依赖 | `PRD.md`、`TECHNICAL_DESIGN.md`、`UI_SPEC.md`、`WEEKLY_REVIEW_MVP.md`、`WEB_CLIENT_MVP.md` |
 | 修订日期 | 2026-08-27 |
 

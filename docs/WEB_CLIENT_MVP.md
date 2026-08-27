@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 | --- | --- |
 | 版本 | 1.0 |
-| 状态 | 已确认（方案定稿，待实现） |
+| 状态 | 已确认；Phase 1 实现已落地 |
 | 确认日期 | 2026-08-27 |
 | 依赖 | [`PRD.md`](./PRD.md)、[`TECHNICAL_DESIGN.md`](./TECHNICAL_DESIGN.md)、[`UI_SPEC.md`](./UI_SPEC.md) |
 | 阶段 | Phase 1（共用后端 + Web 前端）；小程序继续并存 |
