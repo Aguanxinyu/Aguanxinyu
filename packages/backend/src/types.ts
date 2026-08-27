@@ -50,7 +50,17 @@ export interface TodoTag {
 
 export interface UserRecord {
   readonly id: string;
-  readonly openId: string;
+  /** Miniprogram openid; used for subscribe message `touser`. */
+  readonly mpOpenId?: string;
+  /** Website application openid. */
+  readonly webOpenId?: string;
+  /** Open Platform unionid when bound. */
+  readonly unionId?: string;
+  /**
+   * Legacy alias of `mpOpenId` for older rows / callers.
+   * Prefer `mpOpenId`.
+   */
+  readonly openId?: string;
   readonly status: 'ACTIVE' | 'DELETION_PENDING' | 'DELETED';
   readonly deletionRequestedAt?: number;
   readonly purgeAfterAt?: number;

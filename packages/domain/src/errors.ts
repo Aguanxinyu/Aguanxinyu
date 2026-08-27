@@ -1,4 +1,5 @@
 export type DomainErrorCode =
+  | 'IDENTITY_CONFLICT'
   | 'RECURRENCE_INVALID_DATE'
   | 'RECURRENCE_INVALID_MONTH_DAY'
   | 'RECURRENCE_INVALID_RANGE'
@@ -12,7 +13,9 @@ export type DomainErrorCode =
   | 'TASK_MISSING_PURGE_TIME'
   | 'TASK_NOT_TRASHED'
   | 'WECHAT_LOGIN_FAILED'
-  | 'WECHAT_NOT_CONFIGURED';
+  | 'WECHAT_NOT_CONFIGURED'
+  | 'WECHAT_WEB_LOGIN_FAILED'
+  | 'WECHAT_WEB_NOT_CONFIGURED';
 
 export class DomainError extends Error {
   public readonly code: DomainErrorCode;

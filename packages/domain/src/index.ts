@@ -1,3 +1,11 @@
+export {
+  resolveIdentityMerge,
+  type AuthChannel,
+  type IdentityLookup,
+  type IdentityMergeDecision,
+  type UserIdentitySnapshot,
+  type WeChatIdentity
+} from './auth-identity.js';
 export { DomainError, type DomainErrorCode } from './errors.js';
 export {
   compareSortTuples,

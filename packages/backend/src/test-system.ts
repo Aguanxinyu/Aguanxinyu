@@ -17,6 +17,7 @@ import type {
   TodoTag
 } from './types.js';
 import type { WeeklyReviewRecord, WeeklyReviewView } from './weekly-review-types.js';
+import { createFakeWeChatIdentityResolver } from './wechat.js';
 
 type ResponseData<R extends HttpRequest> = R extends {
   readonly method: 'POST';
@@ -112,7 +113,7 @@ export class TestSystem {
     this.api = new ApiService({
       database,
       now: () => this.currentTime,
-      exchangeLoginCode: (code) => Promise.resolve(`openid:${code}`),
+      resolveWeChatIdentity: createFakeWeChatIdentityResolver(),
       ...(options.generateWeeklyReviewWithLlm === undefined
         ? {}
         : { generateWeeklyReviewWithLlm: options.generateWeeklyReviewWithLlm })

@@ -6,6 +6,7 @@ export { Schedulers, type SchedulerOptions } from './schedulers.js';
 export { startServer, type HttpServerOptions } from './http-server.js';
 export {
   buildTemplateData,
+  createFakeWeChatIdentityResolver,
   createWechatClient,
   type TemplateFieldValue,
   type WechatClient,

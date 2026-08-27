@@ -21,7 +21,10 @@ pg.types.setTypeParser(20, (value) => parseInt(value, 10));
 
 interface UserRow {
   id: string;
-  open_id: string;
+  open_id: string | null;
+  mp_open_id: string | null;
+  web_open_id: string | null;
+  union_id: string | null;
   status: UserRecord['status'];
   deletion_requested_at: number | null;
   purge_after_at: number | null;
@@ -106,9 +109,12 @@ interface IdempotencyRow {
 }
 
 function toUserRecord(row: UserRow): UserRecord {
+  const mpOpenId = row.mp_open_id ?? row.open_id ?? undefined;
   return {
     id: row.id,
-    openId: row.open_id,
+    ...(mpOpenId === undefined ? {} : { mpOpenId, openId: mpOpenId }),
+    ...(row.web_open_id === null ? {} : { webOpenId: row.web_open_id }),
+    ...(row.union_id === null ? {} : { unionId: row.union_id }),
     status: row.status,
     ...(row.deletion_requested_at !== null
       ? { deletionRequestedAt: row.deletion_requested_at }
@@ -218,9 +224,31 @@ export class PostgresDatabase implements BackendDatabase {
   }
 
   public async findUserByOpenId(openId: string): Promise<UserRecord | undefined> {
+    return this.findUserByMpOpenId(openId);
+  }
+
+  public async findUserByMpOpenId(mpOpenId: string): Promise<UserRecord | undefined> {
     const result = await this.pool.query<UserRow>(
-      'SELECT * FROM users WHERE open_id = $1 LIMIT 1',
-      [openId]
+      `SELECT * FROM users
+       WHERE mp_open_id = $1 OR open_id = $1
+       LIMIT 1`,
+      [mpOpenId]
+    );
+    return result.rows[0] === undefined ? undefined : toUserRecord(result.rows[0]);
+  }
+
+  public async findUserByWebOpenId(webOpenId: string): Promise<UserRecord | undefined> {
+    const result = await this.pool.query<UserRow>(
+      'SELECT * FROM users WHERE web_open_id = $1 LIMIT 1',
+      [webOpenId]
+    );
+    return result.rows[0] === undefined ? undefined : toUserRecord(result.rows[0]);
+  }
+
+  public async findUserByUnionId(unionId: string): Promise<UserRecord | undefined> {
+    const result = await this.pool.query<UserRow>(
+      'SELECT * FROM users WHERE union_id = $1 LIMIT 1',
+      [unionId]
     );
     return result.rows[0] === undefined ? undefined : toUserRecord(result.rows[0]);
   }
@@ -233,18 +261,28 @@ export class PostgresDatabase implements BackendDatabase {
   }
 
   public async saveUser(user: UserRecord): Promise<void> {
+    const mpOpenId = user.mpOpenId ?? user.openId ?? null;
     await this.pool.query(
-      `INSERT INTO users (id, open_id, status, deletion_requested_at, purge_after_at, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO users (
+         id, open_id, mp_open_id, web_open_id, union_id, status,
+         deletion_requested_at, purge_after_at, created_at, updated_at
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        ON CONFLICT (id) DO UPDATE SET
          open_id = EXCLUDED.open_id,
+         mp_open_id = EXCLUDED.mp_open_id,
+         web_open_id = EXCLUDED.web_open_id,
+         union_id = EXCLUDED.union_id,
          status = EXCLUDED.status,
          deletion_requested_at = EXCLUDED.deletion_requested_at,
          purge_after_at = EXCLUDED.purge_after_at,
          updated_at = EXCLUDED.updated_at`,
       [
         user.id,
-        user.openId,
+        mpOpenId,
+        mpOpenId,
+        user.webOpenId ?? null,
+        user.unionId ?? null,
         user.status,
         user.deletionRequestedAt ?? null,
         user.purgeAfterAt ?? null,
@@ -301,6 +339,10 @@ export class PostgresDatabase implements BackendDatabase {
       [tokenHash, now]
     );
     return result.rows[0] === undefined ? undefined : toSessionRecord(result.rows[0]);
+  }
+
+  public async revokeSession(tokenHash: string): Promise<void> {
+    await this.pool.query('DELETE FROM sessions WHERE token_hash = $1', [tokenHash]);
   }
 
   public async revokeUserSessions(userId: string): Promise<void> {
