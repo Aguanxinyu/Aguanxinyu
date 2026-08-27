@@ -2,10 +2,10 @@
 
 | 项目 | 内容 |
 | --- | --- |
-| 版本 | 1.1 |
-| 状态 | 核心能力进行中；周报 AI 文档已定稿待实现 |
-| 依赖 | `PRD.md`、`TECHNICAL_DESIGN.md`、`UI_SPEC.md`、`WEEKLY_REVIEW_MVP.md` |
-| 修订日期 | 2026-08-25 |
+| 版本 | 1.2 |
+| 状态 | 核心能力、周报 AI 与 Web 客户端 MVP 已落地 |
+| 依赖 | `PRD.md`、`TECHNICAL_DESIGN.md`、`UI_SPEC.md`、`WEEKLY_REVIEW_MVP.md`、`WEB_CLIENT_MVP.md` |
+| 修订日期 | 2026-08-27 |
 
 ## 1. 实施原则
 
@@ -470,7 +470,37 @@
 - 有 Key 的 staging 至少一次真实模型生成成功（可人工触发）。
 - 日志无完整备注明文。
 
-## 16. 提交拆分建议
+## 16. 阶段 14：Web 客户端 MVP
+
+完整口径见 [`WEB_CLIENT_MVP.md`](./WEB_CLIENT_MVP.md)。本阶段在核心待办与周报能力可用后实施；可与运维 hardening 并行。
+
+### 16.1 外部准备
+
+- 微信开放平台网站应用（`WEB_APP_ID` / `WEB_APP_SECRET`）。
+- 授权回调域与小程序同主体绑定，确保 `unionid` 可用。
+
+### 16.2 交付
+
+- 用户表迁移：`union_id` / `mp_open_id` / `web_open_id`；兼容现有 `open_id`。
+- `resolveWeChatIdentity` 多通道抽象；扩展 `POST /v1/auth/login`（`channel`）。
+- `web/` SPA：登录、待办（含按日）、清单、我的、回收站、周报。
+- nginx：静态 SPA + `/v1` 反代。
+- 身份合并单测与 web/miniprogram 登录回归。
+
+### 16.3 测试
+
+- 合并规则：仅 mp / 仅 web / 双侧 + unionid / 冲突。
+- 缺省 `channel` 小程序兼容。
+- 未配置 Web 密钥时 web 登录失败提示清晰，小程序不受影响。
+- 人工：小程序建任务 → 网页扫码可见（及反向）。
+
+### 16.4 门禁 G14
+
+- 文档与实现一致。
+- 验收标准见 `WEB_CLIENT_MVP.md` §12 全部通过。
+- 无第二套业务后端。
+
+## 17. 提交拆分建议
 
 实现开始后，每个逻辑阶段使用独立提交：
 
@@ -488,17 +518,21 @@
 12. `chore: add observability security and release gates`
 13. `docs: lock weekly review AI MVP`
 14. `feat: add weekly review stats and AI generation`
+15. `docs: lock web client MVP`
+16. `feat: add multi-channel wechat auth and user union`
+17. `feat: add web SPA for todos`
 
 测试先行阶段保留 RED、GREEN 和必要的重构证据，具体提交粒度遵循仓库当时的 TDD 工作流。
 
-## 17. 实现启动条件
+## 18. 实现启动条件
 
 开始业务实现前至少需要：
 
 - 本文和相关产品、技术、页面文档保持已确认状态。
-- 明确开发使用的微信 AppID 和阿里云开发账号。
+- 明确开发使用的微信 AppID 和服务器账号。
 - 真实密钥有安全注入方式。
 - 周报 Phase 1 另需国内 LLM 兼容 API 的测试密钥（可后置；无 Key 时先验收降级路径）。
+- Web 客户端另需开放平台网站应用凭据与回调域（可后置；无凭据时先验收小程序通道回归与 mock web 登录）。
 - 外部验证可以在隔离的开发环境执行。
 - 备案、模板和地点申请已启动，或明确接受开发与审批并行。
 

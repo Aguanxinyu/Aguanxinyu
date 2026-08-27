@@ -16,6 +16,9 @@ export interface BackendDatabase {
   nextId(prefix: string): Promise<string>;
 
   findUserByOpenId(openId: string): Promise<UserRecord | undefined>;
+  findUserByMpOpenId(mpOpenId: string): Promise<UserRecord | undefined>;
+  findUserByWebOpenId(webOpenId: string): Promise<UserRecord | undefined>;
+  findUserByUnionId(unionId: string): Promise<UserRecord | undefined>;
   findUserById(userId: string): Promise<UserRecord | undefined>;
   saveUser(user: UserRecord): Promise<void>;
   usersPendingPurge(now: number): Promise<readonly UserRecord[]>;
@@ -26,6 +29,7 @@ export interface BackendDatabase {
 
   saveSession(session: SessionRecord): Promise<void>;
   findActiveSession(tokenHash: string, now: number): Promise<SessionRecord | undefined>;
+  revokeSession(tokenHash: string): Promise<void>;
   revokeUserSessions(userId: string): Promise<void>;
   purgeExpiredSessions(now: number): Promise<void>;
   purgeExpiredIdempotencyResults(now: number): Promise<void>;

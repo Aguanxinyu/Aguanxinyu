@@ -15,6 +15,7 @@ import {
   occurrenceKey,
   reactivateReminder,
   reminderTimeFor,
+  resolveIdentityMerge,
   restoreTask,
   sortTasks,
   taskBelongsToDate,
@@ -27,7 +28,9 @@ import {
   weekEndDateKey,
   weekEndExclusiveMs,
   weekStartForInstant,
+  type AuthChannel,
   type TaskSortTuple,
+  type WeChatIdentity,
   type WeeklyReviewFacts
 } from '@today-todo/domain';
 import { z, ZodError } from 'zod';
@@ -194,6 +197,22 @@ function tokenHash(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }
 
+function toIdentitySnapshot(user: UserRecord): {
+  readonly id: string;
+  readonly mpOpenId?: string;
+  readonly webOpenId?: string;
+  readonly unionId?: string;
+} {
+  return {
+    id: user.id,
+    ...(user.mpOpenId === undefined && user.openId === undefined
+      ? {}
+      : { mpOpenId: user.mpOpenId ?? user.openId }),
+    ...(user.webOpenId === undefined ? {} : { webOpenId: user.webOpenId }),
+    ...(user.unionId === undefined ? {} : { unionId: user.unionId })
+  };
+}
+
 function ruleFromInput(input: z.infer<typeof recurrenceSchema>): RecurrenceRule {
   switch (input.frequency) {
     case 'DAILY':
@@ -222,7 +241,12 @@ function ruleFromInput(input: z.infer<typeof recurrenceSchema>): RecurrenceRule 
 export interface ApiServiceOptions {
   readonly database: BackendDatabase;
   readonly now: () => number;
-  readonly exchangeLoginCode: (code: string) => Promise<string>;
+  readonly resolveWeChatIdentity?: (input: {
+    readonly channel: AuthChannel;
+    readonly code: string;
+  }) => Promise<WeChatIdentity>;
+  /** Prefer `resolveWeChatIdentity`. Legacy miniprogram-only adapter. */
+  readonly exchangeLoginCode?: (code: string) => Promise<string>;
   readonly generateWeeklyReviewWithLlm?: (
     facts: WeeklyReviewFacts
   ) => Promise<LlmWeeklyContent | null>;
@@ -231,7 +255,10 @@ export interface ApiServiceOptions {
 export class ApiService {
   private readonly database: BackendDatabase;
   private readonly now: () => number;
-  private readonly exchangeLoginCode: (code: string) => Promise<string>;
+  private readonly resolveWeChatIdentity: (input: {
+    readonly channel: AuthChannel;
+    readonly code: string;
+  }) => Promise<WeChatIdentity>;
   private readonly generateWeeklyReviewWithLlm?: (
     facts: WeeklyReviewFacts
   ) => Promise<LlmWeeklyContent | null>;
@@ -239,7 +266,20 @@ export class ApiService {
   public constructor(options: ApiServiceOptions) {
     this.database = options.database;
     this.now = options.now;
-    this.exchangeLoginCode = options.exchangeLoginCode;
+    if (options.resolveWeChatIdentity !== undefined) {
+      this.resolveWeChatIdentity = options.resolveWeChatIdentity;
+    } else if (options.exchangeLoginCode !== undefined) {
+      const exchange = options.exchangeLoginCode;
+      this.resolveWeChatIdentity = async (input) => {
+        if (input.channel === 'web') {
+          throw new DomainError('WECHAT_WEB_NOT_CONFIGURED');
+        }
+        const openId = await exchange(input.code);
+        return { channel: 'miniprogram', mpOpenId: openId };
+      };
+    } else {
+      throw new Error('ApiService requires resolveWeChatIdentity or exchangeLoginCode');
+    }
     if (options.generateWeeklyReviewWithLlm !== undefined) {
       this.generateWeeklyReviewWithLlm = options.generateWeeklyReviewWithLlm;
     }
@@ -254,6 +294,10 @@ export class ApiService {
       const method = request.methodOverride ?? request.method;
       const effectiveRequest: HttpRequest =
         method === request.method ? request : { ...request, method };
+
+      if (request.method === 'POST' && request.path === '/v1/auth/logout') {
+        return asApiData(await this.logout(request.token, request.requestId));
+      }
 
       const user = await this.authenticate(request.token);
       if (user === undefined) {
@@ -292,21 +336,52 @@ export class ApiService {
   }
 
   private async login(body: unknown): Promise<HttpResult<AuthData>> {
-    const input = z.object({ code: z.string().min(1) }).parse(body);
-    const openId = await this.exchangeLoginCode(input.code);
+    const input = z
+      .object({
+        code: z.string().min(1),
+        channel: z.enum(['miniprogram', 'web']).optional()
+      })
+      .parse(body);
+    const channel: AuthChannel = input.channel ?? 'miniprogram';
+    const identity = await this.resolveWeChatIdentity({ channel, code: input.code });
     const now = this.now();
-    const existing = await this.database.findUserByOpenId(openId);
-    const user =
-      existing ??
-      ({
+
+    const byUnionId =
+      identity.unionId === undefined
+        ? undefined
+        : await this.database.findUserByUnionId(identity.unionId);
+    const byMpOpenId =
+      identity.mpOpenId === undefined
+        ? undefined
+        : await this.database.findUserByMpOpenId(identity.mpOpenId);
+    const byWebOpenId =
+      identity.webOpenId === undefined
+        ? undefined
+        : await this.database.findUserByWebOpenId(identity.webOpenId);
+
+    const decision = resolveIdentityMerge(identity, {
+      ...(byUnionId === undefined ? {} : { byUnionId: toIdentitySnapshot(byUnionId) }),
+      ...(byMpOpenId === undefined ? {} : { byMpOpenId: toIdentitySnapshot(byMpOpenId) }),
+      ...(byWebOpenId === undefined ? {} : { byWebOpenId: toIdentitySnapshot(byWebOpenId) })
+    });
+
+    if (decision.type === 'conflict') {
+      throw new DomainError('IDENTITY_CONFLICT');
+    }
+
+    let user: UserRecord;
+    if (decision.type === 'create') {
+      user = {
         id: await this.database.nextId('user'),
-        openId,
         status: 'ACTIVE',
         createdAt: now,
-        updatedAt: now
-      } satisfies UserRecord);
-
-    if (existing === undefined) {
+        updatedAt: now,
+        ...(decision.mpOpenId === undefined
+          ? {}
+          : { mpOpenId: decision.mpOpenId, openId: decision.mpOpenId }),
+        ...(decision.webOpenId === undefined ? {} : { webOpenId: decision.webOpenId }),
+        ...(decision.unionId === undefined ? {} : { unionId: decision.unionId })
+      };
       await this.database.saveUser(user);
       await this.database.saveList({
         id: INBOX_LIST_ID,
@@ -316,7 +391,30 @@ export class ApiService {
         createdAt: now,
         updatedAt: now
       });
+    } else {
+      const existing = await this.database.findUserById(decision.userId);
+      if (existing === undefined) {
+        throw new Error(`identity merge target missing: ${decision.userId}`);
+      }
+      const patched: UserRecord = {
+        ...existing,
+        ...(decision.patch.mpOpenId === undefined
+          ? {}
+          : { mpOpenId: decision.patch.mpOpenId, openId: decision.patch.mpOpenId }),
+        ...(decision.patch.webOpenId === undefined ? {} : { webOpenId: decision.patch.webOpenId }),
+        ...(decision.patch.unionId === undefined ? {} : { unionId: decision.patch.unionId }),
+        updatedAt: now
+      };
+      if (
+        decision.patch.mpOpenId !== undefined ||
+        decision.patch.webOpenId !== undefined ||
+        decision.patch.unionId !== undefined
+      ) {
+        await this.database.saveUser(patched);
+      }
+      user = patched;
     }
+
     if (user.status !== 'ACTIVE') {
       return failure(403, 'ACCOUNT_UNAVAILABLE', '账号正在注销或已被删除');
     }
@@ -329,6 +427,20 @@ export class ApiService {
       createdAt: now
     });
     return success(200, { token, userId: user.id });
+  }
+
+  private async logout(
+    token: string | undefined,
+    requestId: string | undefined
+  ): Promise<HttpResult<null>> {
+    if (token === undefined) {
+      return failure(401, 'AUTH_REQUIRED', '登录状态已失效，请重新登录');
+    }
+    if (requestId === undefined || requestId.length === 0) {
+      return failure(400, 'REQUEST_ID_REQUIRED', '写操作必须提供请求标识');
+    }
+    await this.database.revokeSession(tokenHash(token));
+    return success(200, null);
   }
 
   private async authenticate(token: string | undefined): Promise<UserRecord | undefined> {
@@ -978,6 +1090,15 @@ export class ApiService {
       return asApiData(failure(400, 'INPUT_INVALID', '请求参数不符合要求'));
     }
     if (error instanceof DomainError) {
+      if (error.code === 'IDENTITY_CONFLICT') {
+        return asApiData(failure(409, error.code, '微信身份与已有账号冲突，请联系支持处理'));
+      }
+      if (error.code === 'WECHAT_NOT_CONFIGURED' || error.code === 'WECHAT_WEB_NOT_CONFIGURED') {
+        return asApiData(failure(503, error.code, '微信登录暂未配置'));
+      }
+      if (error.code === 'WECHAT_LOGIN_FAILED' || error.code === 'WECHAT_WEB_LOGIN_FAILED') {
+        return asApiData(failure(401, error.code, '微信登录失败，请重试'));
+      }
       return asApiData(failure(409, error.code, '当前状态不允许执行该操作'));
     }
     return asApiData(failure(500, 'INTERNAL_ERROR', '服务暂时不可用，请稍后重试'));

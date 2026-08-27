@@ -5,11 +5,12 @@
   "type": "module",
   "workspaces": [
     "packages/*",
-    "functions/*"
+    "functions/*",
+    "web"
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
-    "typecheck": "tsc --build --pretty false && tsc --project tsconfig.test.json --pretty false && tsc --project miniprogram/tsconfig.json --pretty false",
+    "typecheck": "tsc --build --pretty false && tsc --project tsconfig.test.json --pretty false && tsc --project miniprogram/tsconfig.json --pretty false && npm run typecheck -w @today-todo/web",
     "lint": "eslint .",
     "format:check": "prettier --check .",
     "format": "prettier --write .",
@@ -17,6 +18,8 @@
     "test:coverage": "vitest run --coverage",
     "db:migrate": "node --env-file-if-exists=.env packages/backend/scripts/migrate.js",
     "start": "npm run build -w @today-todo/backend && node --env-file-if-exists=.env packages/backend/dist/server.js",
+    "web:dev": "npm run dev -w @today-todo/web",
+    "web:build": "npm run build -w @today-todo/web",
     "check": "npm run typecheck && npm run lint && npm run format:check && npm run test:coverage"
   },
   "engines": {

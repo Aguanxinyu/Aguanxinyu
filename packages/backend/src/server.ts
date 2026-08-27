@@ -7,7 +7,7 @@ import { startServer } from './http-server.js';
 import { createOpenAiCompatibleLlmClient } from './llm-client.js';
 import { PostgresDatabase } from './postgres-database.js';
 import { Schedulers } from './schedulers.js';
-import { createWechatClient } from './wechat.js';
+import { createFakeWeChatIdentityResolver, createWechatClient } from './wechat.js';
 
 const { Pool } = pg;
 
@@ -70,6 +70,8 @@ function main(): void {
 
   const appId = env('WECHAT_APP_ID');
   const appSecret = env('WECHAT_APP_SECRET');
+  const webAppId = env('WECHAT_WEB_APP_ID');
+  const webAppSecret = env('WECHAT_WEB_APP_SECRET');
   const reminderTemplateId = env('WECHAT_REMINDER_TEMPLATE_ID');
   const reminderTemplateFields = parseTemplateFields(env('WECHAT_REMINDER_TEMPLATE_FIELDS'));
   const reminderPage = env('WECHAT_REMINDER_PAGE') || DEFAULT_REMINDER_PAGE;
@@ -77,6 +79,8 @@ function main(): void {
   const wechat = createWechatClient({
     appId,
     appSecret,
+    ...(webAppId.length > 0 ? { webAppId } : {}),
+    ...(webAppSecret.length > 0 ? { webAppSecret } : {}),
     reminderTemplateId,
     reminderTemplateFields,
     reminderPage,
@@ -84,9 +88,10 @@ function main(): void {
   });
 
   const fakeLogin = env('DEV_FAKE_LOGIN') === '1';
-  const exchangeLoginCode = fakeLogin
-    ? (code: string): Promise<string> => Promise.resolve(`openid:${code}`)
-    : (code: string): Promise<string> => wechat.exchangeLoginCode(code);
+  const resolveWeChatIdentity = fakeLogin
+    ? createFakeWeChatIdentityResolver()
+    : (input: { readonly channel: 'miniprogram' | 'web'; readonly code: string }) =>
+        wechat.resolveWeChatIdentity(input);
 
   const llmApiKey = env('LLM_API_KEY');
   const llmBaseUrl = env('LLM_API_BASE_URL');
@@ -103,7 +108,7 @@ function main(): void {
   const api = new ApiService({
     database,
     now,
-    exchangeLoginCode,
+    resolveWeChatIdentity,
     ...(generateWeeklyReviewWithLlm === undefined ? {} : { generateWeeklyReviewWithLlm })
   });
   const schedulers = new Schedulers({
@@ -159,6 +164,9 @@ function main(): void {
   console.log(`[start] listening on http://127.0.0.1:${String(port)}`);
   console.log(
     `[start] wechat login: ${fakeLogin ? 'FAKE' : appId.length > 0 && appSecret.length > 0 ? 'configured' : 'NOT CONFIGURED'}`
+  );
+  console.log(
+    `[start] wechat web login: ${fakeLogin ? 'FAKE' : webAppId.length > 0 && webAppSecret.length > 0 ? 'configured' : 'NOT CONFIGURED'}`
   );
   console.log(
     `[start] reminders: ${reminderTemplateId.length > 0 ? 'configured' : 'NOT CONFIGURED'}`

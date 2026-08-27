@@ -78,7 +78,21 @@ export class MemoryDatabase implements BackendDatabase {
   }
 
   public findUserByOpenId(openId: string): Promise<UserRecord | undefined> {
-    return Promise.resolve(this.snapshot.users.find((user) => user.openId === openId));
+    return this.findUserByMpOpenId(openId);
+  }
+
+  public findUserByMpOpenId(mpOpenId: string): Promise<UserRecord | undefined> {
+    return Promise.resolve(
+      this.snapshot.users.find((user) => user.mpOpenId === mpOpenId || user.openId === mpOpenId)
+    );
+  }
+
+  public findUserByWebOpenId(webOpenId: string): Promise<UserRecord | undefined> {
+    return Promise.resolve(this.snapshot.users.find((user) => user.webOpenId === webOpenId));
+  }
+
+  public findUserByUnionId(unionId: string): Promise<UserRecord | undefined> {
+    return Promise.resolve(this.snapshot.users.find((user) => user.unionId === unionId));
   }
 
   public findUserById(userId: string): Promise<UserRecord | undefined> {
@@ -86,9 +100,18 @@ export class MemoryDatabase implements BackendDatabase {
   }
 
   public saveUser(user: UserRecord): Promise<void> {
+    const normalized: UserRecord = {
+      ...user,
+      ...(user.mpOpenId !== undefined || user.openId !== undefined
+        ? {
+            mpOpenId: user.mpOpenId ?? user.openId,
+            openId: user.mpOpenId ?? user.openId
+          }
+        : {})
+    };
     this.snapshot = {
       ...this.snapshot,
-      users: upsertById(this.snapshot.users, user)
+      users: upsertById(this.snapshot.users, normalized)
     };
     return Promise.resolve();
   }
@@ -107,6 +130,14 @@ export class MemoryDatabase implements BackendDatabase {
         (session) => session.tokenHash === tokenHash && session.expiresAt > now
       )
     );
+  }
+
+  public revokeSession(tokenHash: string): Promise<void> {
+    this.snapshot = {
+      ...this.snapshot,
+      sessions: this.snapshot.sessions.filter((session) => session.tokenHash !== tokenHash)
+    };
+    return Promise.resolve();
   }
 
   public revokeUserSessions(userId: string): Promise<void> {

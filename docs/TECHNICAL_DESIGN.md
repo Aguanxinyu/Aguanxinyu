@@ -2,15 +2,15 @@
 
 | 项目 | 内容 |
 | --- | --- |
-| 版本 | 1.2 |
-| 状态 | 已确认，含部署路径修订与周报 MVP 草案 |
+| 版本 | 1.3 |
+| 状态 | 已确认，含周报 MVP 与 Web 客户端多端登录 |
 | 确认日期 | 2026-07-31 |
-| 修订日期 | 2026-08-25 |
-| 前端 | 微信原生小程序 + TypeScript |
+| 修订日期 | 2026-08-27 |
+| 前端 | 微信原生小程序 + TypeScript；浏览器 Web SPA |
 | 后端 | 自建 Node.js HTTP 服务（systemd） |
 | 数据库 | PostgreSQL |
 
-周报 AI MVP 的产品门控与验收以 [`WEEKLY_REVIEW_MVP.md`](./WEEKLY_REVIEW_MVP.md) 为准；本章补充数据、接口与适配边界。
+周报 AI MVP 以 [`WEEKLY_REVIEW_MVP.md`](./WEEKLY_REVIEW_MVP.md) 为准；Web 客户端 MVP 以 [`WEB_CLIENT_MVP.md`](./WEB_CLIENT_MVP.md) 为准。本章补充数据、接口与适配边界。
 
 ## 1. 设计目标
 
@@ -19,18 +19,26 @@
 - 用户数据隔离。
 - 重复任务生成正确且幂等。
 - 提醒尽力准时发送且避免重复骚扰。
-- 无网络时不产生伪成功修改。
+- 无网络时不产生伪成功修改（小程序）；Web MVP 在线优先。
 - 注销后立即撤销访问，并在 7 天内删除业务数据。
 - 初期云资源保持低固定成本和低运维负担。
 - 周报生成以模型 API 为主路径，配置缺失时可降级，且遵守周日 19:00（上海）AI 门控。
+- 小程序与 Web 共用同一套 API 与用户体系；登录通道可插拔。
 
 ## 2. 平台事实与风险
 
 ### 2.1 微信登录
 
-小程序调用 `wx.login` 获取一次性临时凭证，服务端调用微信 `code2Session` 换取 `openid` 和 `session_key`。`session_key` 只在服务端使用，不返回客户端。
+**小程序**：调用 `wx.login` 获取一次性临时凭证，服务端调用微信 `code2Session` 换取 `openid`、`session_key`（及绑定开放平台后的 `unionid`）。`session_key` 只在服务端使用，不返回客户端。
 
-参考：[微信小程序登录](https://developers.weixin.qq.com/miniprogram/dev/framework/open-ability/login.html)
+**Web**：使用微信开放平台**网站应用**扫码 OAuth；服务端用 `code` 换取 `access_token`、`openid`、`unionid`。完整流程与合并规则见 [`WEB_CLIENT_MVP.md`](./WEB_CLIENT_MVP.md)。
+
+服务端统一抽象 `resolveWeChatIdentity({ channel, code })`，通道为 `miniprogram | web`；再进入共用的找用户 / 建用户 / 发 session。
+
+参考：
+
+- [微信小程序登录](https://developers.weixin.qq.com/miniprogram/dev/framework/open-ability/login.html)
+- [网站应用微信登录](https://developers.weixin.qq.com/doc/oplatform/Website_App/WeChat_Login/Wechat_Login.html)
 
 ### 2.2 订阅消息
 
@@ -132,10 +140,11 @@ docs/
 模块职责：
 
 - `miniprogram`：页面、组件、客户端状态、请求和缓存（含离线写回）。
+- `web`：浏览器 SPA（登录、待办、清单、我的、回收站、周报）；静态构建产物由 nginx 托管。
 - `contracts`：请求、响应、领域类型和错误码的单一事实来源。
 - `domain`：状态迁移、重复规则、时间计算和配额规则等纯函数。
-- `backend`：HTTP 适配、API 用例、PostgreSQL 仓储、微信客户端和调度器。
-- `deploy`：systemd 与 nginx 样例配置。
+- `backend`：HTTP 适配、API 用例、PostgreSQL 仓储、微信多通道客户端和调度器。
+- `deploy`：systemd 与 nginx 样例配置（静态 SPA + `/v1` 反代）。
 
 领域层不得依赖微信或云 SDK。所有更新返回新对象，不原地修改共享状态。
 
@@ -151,12 +160,16 @@ docs/
 
 主要字段：
 
-- 加密或受保护的 `openid`。
+- `union_id`（可空，有则唯一）：开放平台绑定后打通小程序与网站应用。
+- `mp_open_id`（可空，有则唯一）：小程序 openid；由原 `open_id` 迁移而来。
+- `web_open_id`（可空，有则唯一）：网站应用 openid。
 - `status`：`ACTIVE`、`DELETION_PENDING`、`DELETED`。
 - `deletionRequestedAt`。
 - `purgeAfterAt`。
 - 用户偏好。
 - 创建和更新时间。
+
+身份合并规则见 [`WEB_CLIENT_MVP.md`](./WEB_CLIENT_MVP.md) §6；冲突不自动硬合并。
 
 ### 5.2 `sessions`
 
@@ -468,9 +481,11 @@ ACTIVE ──→ DELETION_PENDING ──→ DELETED
 
 | 方法 | 路径 | 用途 |
 | --- | --- | --- |
-| `POST` | `/v1/auth/login` | 微信静默登录 |
+| `POST` | `/v1/auth/login` | 微信登录（`channel`: `miniprogram` 缺省 / `web`） |
 | `POST` | `/v1/auth/refresh` | 轮换会话凭证 |
 | `POST` | `/v1/auth/logout` | 撤销当前会话 |
+
+`POST /v1/auth/login` body：`{ "channel"?: "miniprogram" \| "web", "code": "..." }`。缺省 `channel` 视为小程序以兼容现网。`web` 走网站应用换票。响应仍为 `{ token, userId }`。
 
 ### 9.2 待办
 
@@ -678,6 +693,8 @@ Store 分为：
 部署要求：
 
 - 使用 `deploy/today-todo.service` 与 `deploy/nginx-today-todo.conf` 作为基线。
+- Web 上线后：nginx `/` 托管 SPA 静态资源（`try_files`），`/v1`（及 `/health` 若需要）反代 Node；同域优先以避免 CORS。
+- 环境变量除小程序凭据外，Web 需 `WECHAT_WEB_APP_ID` / `WECHAT_WEB_APP_SECRET`（名称以实现为准）。
 - 禁止把生产密钥提交到仓库。
 - 服务应可快速回滚到上一构建产物。
 - 小程序体验版通过开发者工具或 `miniprogram-ci` 上传。
@@ -762,3 +779,4 @@ Store 分为：
 | ADR-010 | 业务时区固定为 `Asia/Shanghai` |
 | ADR-011 | 部署路径修订为自建 Node.js + PostgreSQL + nginx HTTPS |
 | ADR-012 | 周报 AI：自然周；周日 19:00 起可对本周调模型；主路径 OpenAI 兼容 API；无 Key/失败降级规则；备注送模；推送 Phase 2 |
+| ADR-013 | Web 客户端：网站应用扫码登录；`unionid` 打通双端；共用 ApiService；nginx 静态 SPA + `/v1` 反代 |
