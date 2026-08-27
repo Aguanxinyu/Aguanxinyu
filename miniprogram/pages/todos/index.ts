@@ -8,6 +8,7 @@ import {
   dayStartMs,
   formatDaySubtitle,
   formatDayTitle,
+  formatDueLabel,
   monthKeyFromDateKey,
   monthTitle,
   shiftDateKey,
@@ -35,15 +36,7 @@ function displayTask(task: ClientTask): DisplayTask {
   const dayKey =
     task.occurrenceDate ?? (task.dueAt === undefined ? null : dateKeyFromTimestamp(task.dueAt));
   const dueLabel =
-    task.dueAt === undefined
-      ? '未设置时间'
-      : new Date(task.dueAt).toLocaleString('zh-CN', {
-          timeZone: 'Asia/Shanghai',
-          month: 'numeric',
-          day: 'numeric',
-          hour: task.dueHasTime ? '2-digit' : undefined,
-          minute: task.dueHasTime ? '2-digit' : undefined
-        });
+    task.dueAt === undefined ? '未设置时间' : formatDueLabel(task.dueAt, task.dueHasTime);
   return {
     ...task,
     dueLabel,

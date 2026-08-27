@@ -1,5 +1,6 @@
 import { ApiClientError, apiClient } from '../../services/api.js';
 import { todoController } from '../../stores/todo-controller.js';
+import { formatShanghaiDate } from '../../utils/calendar.js';
 import { getCustomNavInset } from '../../utils/layout.js';
 
 function messageFor(error: unknown): string {
@@ -50,7 +51,7 @@ Page({
           .startAccountDeletion()
           .then(({ purgeAfterAt }) => {
             apiClient.clearSession();
-            const date = new Date(purgeAfterAt).toLocaleDateString('zh-CN');
+            const date = formatShanghaiDate(purgeAfterAt);
             void wx.showModal({
               title: '注销申请已提交',
               content: `账号数据预计在 ${date} 后永久删除。`,
