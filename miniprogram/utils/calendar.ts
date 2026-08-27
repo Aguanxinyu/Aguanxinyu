@@ -1,6 +1,9 @@
-/** Asia/Shanghai calendar helpers for the mini program UI. */
+/** Asia/Shanghai calendar helpers for the mini program UI.
+ * Avoid `Intl` — many WeChat mini program runtimes do not define it.
+ */
 
 const WEEKDAY_LABELS = ['日', '一', '二', '三', '四', '五', '六'] as const;
+const SHANGHAI_OFFSET_MS = 8 * 60 * 60 * 1000;
 
 export interface DayCell {
   readonly key: string;
@@ -22,31 +25,13 @@ export function shanghaiParts(timestamp: number): {
   readonly day: number;
   readonly weekday: number;
 } {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'Asia/Shanghai',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    weekday: 'short'
-  }).formatToParts(new Date(timestamp));
-  const lookup = (type: Intl.DateTimeFormatPartTypes): string =>
-    parts.find((part) => part.type === type)?.value ?? '';
-  const weekdayToken = lookup('weekday');
-  const weekdayMap: Readonly<Record<string, number>> = {
-    Sun: 0,
-    Mon: 1,
-    Tue: 2,
-    Wed: 3,
-    Thu: 4,
-    Fri: 5,
-    Sat: 6
-  };
-  return {
-    year: Number(lookup('year')),
-    month: Number(lookup('month')),
-    day: Number(lookup('day')),
-    weekday: weekdayMap[weekdayToken] ?? 0
-  };
+  const shifted = new Date(timestamp + SHANGHAI_OFFSET_MS);
+  const year = shifted.getUTCFullYear();
+  const month = shifted.getUTCMonth() + 1;
+  const day = shifted.getUTCDate();
+  // Weekday of that Shanghai calendar date (timezone-independent for a Y-M-D).
+  const weekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+  return { year, month, day, weekday };
 }
 
 export function dateKeyFromTimestamp(timestamp: number): string {
@@ -188,4 +173,23 @@ export function monthTitle(monthKey: string): string {
 export function monthKeyFromDateKey(key: string): string {
   const { year, month } = parseDateKey(key);
   return `${String(year)}-${pad(month)}-01`;
+}
+
+/** Display label for a due instant without using Intl (mini program safe). */
+export function formatDueLabel(dueAt: number, dueHasTime: boolean): string {
+  const { year, month, day } = shanghaiParts(dueAt);
+  const datePart = `${String(month)}月${String(day)}日`;
+  if (!dueHasTime) {
+    const thisYear = shanghaiParts(Date.now()).year;
+    return year === thisYear ? datePart : `${String(year)}年${datePart}`;
+  }
+  const shifted = new Date(dueAt + SHANGHAI_OFFSET_MS);
+  const hour = pad(shifted.getUTCHours());
+  const minute = pad(shifted.getUTCMinutes());
+  return `${datePart} ${hour}:${minute}`;
+}
+
+export function formatShanghaiDate(timestamp: number): string {
+  const { year, month, day } = shanghaiParts(timestamp);
+  return `${String(year)}年${String(month)}月${String(day)}日`;
 }

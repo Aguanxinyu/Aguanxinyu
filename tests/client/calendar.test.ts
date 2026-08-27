@@ -6,6 +6,7 @@ import {
   dateKeyFromTimestamp,
   dayStartMs,
   formatDayTitle,
+  formatDueLabel,
   monthKeyFromDateKey,
   shiftDateKey,
   todayKey
@@ -44,5 +45,10 @@ describe('calendar helpers', () => {
     expect(grid.length % 7).toBe(0);
     expect(grid.some((cell) => cell.key === '2026-08-01' && cell.inMonth)).toBe(true);
     expect(dayStartMs('2026-08-21')).toBe(Date.parse('2026-08-21T00:00:00+08:00'));
+  });
+
+  it('formats due labels without Intl', () => {
+    expect(formatDueLabel(Date.parse('2026-08-21T01:05:00.000Z'), false)).toBe('8月21日');
+    expect(formatDueLabel(Date.parse('2026-08-21T01:05:00.000Z'), true)).toBe('8月21日 09:05');
   });
 });

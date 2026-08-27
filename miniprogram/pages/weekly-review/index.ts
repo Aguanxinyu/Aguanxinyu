@@ -1,5 +1,6 @@
 import { ApiClientError, apiClient, type WeeklyReviewClientView } from '../../services/api.js';
 import { getCustomNavInset } from '../../utils/layout.js';
+import { shiftDateKey } from '../../utils/calendar.js';
 
 function messageFor(error: unknown): string {
   return error instanceof ApiClientError ? error.message : '操作失败，请稍后重试';
@@ -12,13 +13,7 @@ function formatRange(weekStart: string, weekEnd: string): string {
 }
 
 function shiftWeek(weekStart: string, deltaDays: number): string {
-  const ms = Date.parse(`${weekStart}T12:00:00+08:00`) + deltaDays * 24 * 60 * 60 * 1000;
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Shanghai',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  }).format(new Date(ms));
+  return shiftDateKey(weekStart, deltaDays);
 }
 
 function emptyStats(): WeeklyReviewClientView['stats'] {
