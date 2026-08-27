@@ -26,7 +26,7 @@ export default tseslint.config(
     }
   },
   {
-    files: ['web/vite.config.ts'],
+    files: ['web/vite.config.ts', 'packages/backend/scripts/**/*.mjs'],
     ...tseslint.configs.disableTypeChecked
   },
   {

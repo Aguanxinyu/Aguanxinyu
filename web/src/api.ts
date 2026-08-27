@@ -49,14 +49,17 @@ export interface WeeklyReviewView {
   readonly weekEnd: string;
   readonly aiAllowed: boolean;
   readonly stats: {
-    readonly createdCount: number;
-    readonly completedCount: number;
-    readonly overdueCount: number;
-    readonly completionRate: number;
+    readonly total: number;
+    readonly completed: number;
+    readonly open: number;
+    readonly overdueOpen: number;
+    readonly highPriorityTotal: number;
+    readonly highPriorityCompleted: number;
+    readonly highPriorityCompletionRate: number;
   };
   readonly review: null | {
     readonly summary: string;
-    readonly source: 'MODEL' | 'RULES';
+    readonly source: 'model' | 'rules';
     readonly improvements: readonly {
       readonly type: string;
       readonly title: string;

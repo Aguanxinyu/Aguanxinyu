@@ -595,7 +595,7 @@ async function renderWeekly(): Promise<void> {
       </section>
       <div class="panel">
         <h2>本周统计</h2>
-        <p>创建 ${String(view.stats.createdCount)} · 完成 ${String(view.stats.completedCount)} · 逾期 ${String(view.stats.overdueCount)} · 完成率 ${String(Math.round(view.stats.completionRate * 100))}%</p>
+        <p>创建 ${String(view.stats.total)} · 完成 ${String(view.stats.completed)} · 逾期 ${String(view.stats.overdueOpen)} · 完成率 ${String(view.stats.total === 0 ? 0 : Math.round((view.stats.completed / view.stats.total) * 100))}%</p>
         ${
           view.aiAllowed
             ? `<button type="button" class="btn btn-primary" id="generate-review">生成周报</button>`
@@ -606,7 +606,7 @@ async function renderWeekly(): Promise<void> {
         view.review === null
           ? `<div class="empty">还没有生成周报。</div>`
           : `<div class="panel">
-              <h2>${view.review.source === 'MODEL' ? 'AI 摘要' : '规则摘要'}</h2>
+              <h2>${view.review.source === 'model' ? 'AI 摘要' : '规则摘要'}</h2>
               <p>${escapeHtml(view.review.summary)}</p>
               ${view.review.improvements
                 .map(
