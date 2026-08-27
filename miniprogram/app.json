@@ -22,19 +22,24 @@
     "list": [
       {
         "pagePath": "pages/todos/index",
-        "text": "待办"
+        "text": "待办",
+        "iconPath": "assets/tab/todos.png",
+        "selectedIconPath": "assets/tab/todos-active.png"
       },
       {
         "pagePath": "pages/lists/index",
-        "text": "清单"
+        "text": "清单",
+        "iconPath": "assets/tab/lists.png",
+        "selectedIconPath": "assets/tab/lists-active.png"
       },
       {
         "pagePath": "pages/profile/index",
-        "text": "我的"
+        "text": "我的",
+        "iconPath": "assets/tab/profile.png",
+        "selectedIconPath": "assets/tab/profile-active.png"
       }
     ]
   },
   "style": "v2",
-  "sitemapLocation": "sitemap.json",
-  "lazyCodeLoading": "requiredComponents"
+  "sitemapLocation": "sitemap.json"
 }
