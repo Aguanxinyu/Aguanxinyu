@@ -15,6 +15,7 @@ function makeTask(overrides: Partial<Task>): Task {
     userId: 'user-1',
     title: '提交周报',
     dueHasTime: true,
+    startHasTime: false,
     priority: 'MEDIUM',
     status: 'TODO',
     listId: 'inbox',

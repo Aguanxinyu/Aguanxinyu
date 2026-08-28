@@ -19,6 +19,7 @@ import {
   restoreTask,
   sortTasks,
   taskBelongsToDate,
+  taskOverlapsDateRange,
   taskSortTuple,
   trashTask,
   uncompleteTask,
@@ -98,6 +99,8 @@ const createTaskSchema = z.object({
   title: z.string().max(100),
   notes: z.string().max(1000).optional(),
   priority: z.enum(['HIGH', 'MEDIUM', 'LOW']),
+  startAt: z.number().optional(),
+  startHasTime: z.boolean().default(false),
   dueAt: z.number().optional(),
   dueHasTime: z.boolean(),
   listId: z.string().optional(),
@@ -112,6 +115,8 @@ const updateTaskSchema = z.object({
   title: z.string().max(100).optional(),
   notes: z.string().max(1000).optional(),
   priority: z.enum(['HIGH', 'MEDIUM', 'LOW']).optional(),
+  startAt: z.number().optional(),
+  startHasTime: z.boolean().optional(),
   dueAt: z.number().optional(),
   dueHasTime: z.boolean().optional(),
   listId: z.string().optional(),
@@ -593,6 +598,7 @@ export class ApiService {
       priority: input.priority,
       listId,
       tagIds: input.tagIds,
+      startHasTime: input.startHasTime,
       dueHasTime: input.dueHasTime,
       ...(input.notes === undefined ? {} : { notes: input.notes }),
       ...(input.location === undefined ? {} : { location: input.location })
@@ -626,6 +632,7 @@ export class ApiService {
       status: 'TODO',
       listId: series.template.listId,
       tagIds: series.template.tagIds,
+      startHasTime: series.template.startHasTime,
       dueHasTime: series.template.dueHasTime,
       seriesId: series.id,
       occurrenceDate,
@@ -653,11 +660,13 @@ export class ApiService {
       status: 'TODO',
       listId,
       tagIds: input.tagIds,
+      startHasTime: input.startHasTime,
       dueHasTime: input.dueHasTime,
       version: 1,
       createdAt: now,
       updatedAt: now,
       ...(input.notes === undefined ? {} : { notes: input.notes }),
+      ...(input.startAt === undefined ? {} : { startAt: input.startAt }),
       ...(input.dueAt === undefined ? {} : { dueAt: input.dueAt }),
       ...(input.location === undefined ? {} : { location: input.location })
     };
@@ -716,6 +725,8 @@ export class ApiService {
       ...(input.title === undefined ? {} : { title: input.title }),
       ...(input.notes === undefined ? {} : { notes: input.notes }),
       ...(input.priority === undefined ? {} : { priority: input.priority }),
+      ...(input.startAt === undefined ? {} : { startAt: input.startAt }),
+      ...(input.startHasTime === undefined ? {} : { startHasTime: input.startHasTime }),
       ...(input.dueAt === undefined ? {} : { dueAt: input.dueAt }),
       ...(input.dueHasTime === undefined ? {} : { dueHasTime: input.dueHasTime }),
       ...(input.location === undefined ? {} : { location: input.location }),
@@ -811,6 +822,23 @@ export class ApiService {
     if (dueOn !== undefined && !DATE_PATTERN.test(dueOn)) {
       return failure(400, 'INVALID_DUE_ON', 'dueOn 必须是 YYYY-MM-DD');
     }
+    const dueFromRaw = query?.dueFrom;
+    const dueFrom =
+      typeof dueFromRaw === 'string' && dueFromRaw.length > 0 ? dueFromRaw : undefined;
+    if (dueFrom !== undefined && !DATE_PATTERN.test(dueFrom)) {
+      return failure(400, 'INVALID_DUE_FROM', 'dueFrom 必须是 YYYY-MM-DD');
+    }
+    const dueToRaw = query?.dueTo;
+    const dueTo = typeof dueToRaw === 'string' && dueToRaw.length > 0 ? dueToRaw : undefined;
+    if (dueTo !== undefined && !DATE_PATTERN.test(dueTo)) {
+      return failure(400, 'INVALID_DUE_TO', 'dueTo 必须是 YYYY-MM-DD');
+    }
+    if (dueFrom !== undefined && dueTo !== undefined && dueFrom > dueTo) {
+      return failure(400, 'INVALID_DUE_RANGE', 'dueFrom 不能晚于 dueTo');
+    }
+    if ((dueFrom !== undefined || dueTo !== undefined) && dueOn !== undefined) {
+      return failure(400, 'INVALID_DUE_QUERY', 'dueOn 不能与 dueFrom/dueTo 同时使用');
+    }
     const limit = parseLimit(query?.limit);
     const cursor = decodeCursor(query?.cursor);
     const now = this.now();
@@ -818,6 +846,9 @@ export class ApiService {
       (await this.database.tasksForUser(user.id)).filter((task) => {
         if (task.status === 'TRASHED') {
           return false;
+        }
+        if (dueFrom !== undefined && dueTo !== undefined) {
+          return taskOverlapsDateRange(task, dueFrom, dueTo, now);
         }
         return dueOn === undefined || taskBelongsToDate(task, dueOn, now);
       })

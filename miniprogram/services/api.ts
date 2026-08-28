@@ -85,6 +85,8 @@ export interface CreateTaskInput {
   readonly title: string;
   readonly notes?: string;
   readonly priority: 'HIGH' | 'MEDIUM' | 'LOW';
+  readonly startAt?: number;
+  readonly startHasTime: boolean;
   readonly dueAt?: number;
   readonly dueHasTime: boolean;
   readonly listId?: string;
@@ -135,6 +137,8 @@ export interface TaskListResult {
 export interface ListTasksOptions {
   readonly cursor?: string;
   readonly dueOn?: string;
+  readonly dueFrom?: string;
+  readonly dueTo?: string;
 }
 
 export class ApiClientError extends Error {
@@ -214,6 +218,12 @@ export class ApiClient {
     }
     if (options.dueOn !== undefined && options.dueOn.length > 0) {
       params.push(`dueOn=${encodeURIComponent(options.dueOn)}`);
+    }
+    if (options.dueFrom !== undefined && options.dueFrom.length > 0) {
+      params.push(`dueFrom=${encodeURIComponent(options.dueFrom)}`);
+    }
+    if (options.dueTo !== undefined && options.dueTo.length > 0) {
+      params.push(`dueTo=${encodeURIComponent(options.dueTo)}`);
     }
     const path = params.length === 0 ? '/v1/tasks' : `/v1/tasks?${params.join('&')}`;
     const envelope = await this.requestEnvelope<readonly ClientTask[]>('GET', path);

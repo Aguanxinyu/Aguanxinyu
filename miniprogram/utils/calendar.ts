@@ -13,6 +13,7 @@ export interface DayCell {
   readonly isToday: boolean;
   readonly isFuture: boolean;
   readonly inMonth: boolean;
+  readonly hasTasks?: boolean;
 }
 
 function pad(value: number): string {
@@ -175,6 +176,89 @@ export function monthKeyFromDateKey(key: string): string {
   return `${String(year)}-${pad(month)}-01`;
 }
 
+function compareDateKeys(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+export interface TaskScheduleLike {
+  readonly occurrenceDate?: string;
+  readonly startAt?: number;
+  readonly dueAt?: number;
+}
+
+export function taskDateSpan(
+  task: TaskScheduleLike,
+  now = Date.now()
+): { readonly from: string; readonly to: string } | null {
+  if (task.occurrenceDate !== undefined) {
+    return { from: task.occurrenceDate, to: task.occurrenceDate };
+  }
+  const startKey = task.startAt === undefined ? undefined : dateKeyFromTimestamp(task.startAt);
+  const dueKey = task.dueAt === undefined ? undefined : dateKeyFromTimestamp(task.dueAt);
+  if (startKey !== undefined && dueKey !== undefined) {
+    return startKey <= dueKey ? { from: startKey, to: dueKey } : { from: dueKey, to: startKey };
+  }
+  if (dueKey !== undefined) {
+    return { from: dueKey, to: dueKey };
+  }
+  if (startKey !== undefined) {
+    return { from: startKey, to: startKey };
+  }
+  const today = todayKey(now);
+  return { from: today, to: today };
+}
+
+export function taskBelongsToCalendarDay(
+  task: TaskScheduleLike,
+  dayKey: string,
+  now = Date.now()
+): boolean {
+  const span = taskDateSpan(task, now);
+  if (span === null) {
+    return false;
+  }
+  return compareDateKeys(span.from, dayKey) <= 0 && compareDateKeys(dayKey, span.to) <= 0;
+}
+
+export function collectDatesWithTasks(
+  tasks: readonly TaskScheduleLike[],
+  fromKey: string,
+  toKey: string,
+  now = Date.now()
+): ReadonlySet<string> {
+  const dates = new Set<string>();
+  for (const task of tasks) {
+    const span = taskDateSpan(task, now);
+    if (span === null) {
+      continue;
+    }
+    const start = compareDateKeys(span.from, fromKey) < 0 ? fromKey : span.from;
+    const end = compareDateKeys(span.to, toKey) > 0 ? toKey : span.to;
+    if (compareDateKeys(start, end) > 0) {
+      continue;
+    }
+    let cursor = start;
+    while (compareDateKeys(cursor, end) <= 0) {
+      dates.add(cursor);
+      if (cursor === end) {
+        break;
+      }
+      cursor = shiftDateKey(cursor, 1);
+    }
+  }
+  return dates;
+}
+
+export function applyTaskMarkers(
+  cells: readonly DayCell[],
+  datesWithTasks: ReadonlySet<string>
+): readonly DayCell[] {
+  return cells.map((cell) => ({
+    ...cell,
+    hasTasks: datesWithTasks.has(cell.key)
+  }));
+}
+
 /** Display label for a due instant without using Intl (mini program safe). */
 export function formatDueLabel(dueAt: number, dueHasTime: boolean): string {
   const { year, month, day } = shanghaiParts(dueAt);
@@ -192,4 +276,41 @@ export function formatDueLabel(dueAt: number, dueHasTime: boolean): string {
 export function formatShanghaiDate(timestamp: number): string {
   const { year, month, day } = shanghaiParts(timestamp);
   return `${String(year)}年${String(month)}月${String(day)}日`;
+}
+
+function formatInstantLabel(timestamp: number, hasTime: boolean): string {
+  const { year, month, day } = shanghaiParts(timestamp);
+  const datePart = `${String(month)}月${String(day)}日`;
+  if (!hasTime) {
+    const thisYear = shanghaiParts(Date.now()).year;
+    return year === thisYear ? datePart : `${String(year)}年${datePart}`;
+  }
+  const shifted = new Date(timestamp + SHANGHAI_OFFSET_MS);
+  const hour = pad(shifted.getUTCHours());
+  const minute = pad(shifted.getUTCMinutes());
+  return `${datePart} ${hour}:${minute}`;
+}
+
+/** Human-readable start/end schedule without Intl. */
+export function formatScheduleLabel(options: {
+  readonly startAt?: number;
+  readonly startHasTime: boolean;
+  readonly dueAt?: number;
+  readonly dueHasTime: boolean;
+}): string {
+  const { startAt, startHasTime, dueAt, dueHasTime } = options;
+  if (startAt !== undefined && dueAt !== undefined) {
+    const startLabel = formatInstantLabel(startAt, startHasTime);
+    const dueLabel = formatInstantLabel(dueAt, dueHasTime);
+    return startLabel === dueLabel && startHasTime === dueHasTime
+      ? startLabel
+      : `${startLabel} → ${dueLabel}`;
+  }
+  if (startAt !== undefined) {
+    return `开始 ${formatInstantLabel(startAt, startHasTime)}`;
+  }
+  if (dueAt !== undefined) {
+    return formatInstantLabel(dueAt, dueHasTime);
+  }
+  return '未设置时间';
 }

@@ -60,8 +60,12 @@ Page({
     notes: '',
     priorityIndex: 1,
     priorities: ['高', '中', '低'],
-    date: today(),
-    time: '18:00',
+    startDate: today(),
+    startTime: '09:00',
+    hasStartDate: false,
+    hasStartTime: false,
+    dueDate: today(),
+    dueTime: '18:00',
     hasDueDate: false,
     hasDueTime: false,
     reminderEnabled: false,
@@ -83,7 +87,8 @@ Page({
         : today();
     if (options.id === undefined) {
       this.setData({
-        date: presetDate,
+        startDate: presetDate,
+        dueDate: presetDate,
         hasDueDate: typeof options.date === 'string'
       });
     }
@@ -98,8 +103,12 @@ Page({
     try {
       const task = await apiClient.getTask(taskId);
       const priorityIndex = PRIORITIES.indexOf(task.priority);
-      const { date, time } =
+      const dueParts =
         task.dueAt === undefined ? { date: today(), time: '18:00' } : formatDateTime(task.dueAt);
+      const startParts =
+        task.startAt === undefined
+          ? { date: dueParts.date, time: '09:00' }
+          : formatDateTime(task.startAt);
       this.setData({
         pageTitle: '编辑待办',
         pageSubtitle: '修改后将同步到所有设备',
@@ -107,8 +116,12 @@ Page({
         title: task.title,
         notes: task.notes ?? '',
         priorityIndex: priorityIndex === -1 ? 1 : priorityIndex,
-        date,
-        time,
+        startDate: startParts.date,
+        startTime: startParts.time,
+        hasStartDate: task.startAt !== undefined,
+        hasStartTime: task.startHasTime,
+        dueDate: dueParts.date,
+        dueTime: dueParts.time,
         hasDueDate: task.dueAt !== undefined,
         hasDueTime: task.dueHasTime,
         reminderEnabled: task.remindAt !== undefined,
@@ -149,15 +162,34 @@ Page({
     this.setData({ repeatIndex: Number(event.detail.value) });
   },
 
-  onDateChange(event: WechatMiniprogram.PickerChange) {
-    this.setData({ date: String(event.detail.value), hasDueDate: true });
+  onStartDateChange(event: WechatMiniprogram.PickerChange) {
+    this.setData({ startDate: String(event.detail.value), hasStartDate: true });
   },
 
-  onTimeChange(event: WechatMiniprogram.PickerChange) {
+  onStartTimeChange(event: WechatMiniprogram.PickerChange) {
     this.setData({
-      time: String(event.detail.value),
+      startTime: String(event.detail.value),
+      hasStartDate: true,
+      hasStartTime: true
+    });
+  },
+
+  onDueDateChange(event: WechatMiniprogram.PickerChange) {
+    this.setData({ dueDate: String(event.detail.value), hasDueDate: true });
+  },
+
+  onDueTimeChange(event: WechatMiniprogram.PickerChange) {
+    this.setData({
+      dueTime: String(event.detail.value),
       hasDueDate: true,
       hasDueTime: true
+    });
+  },
+
+  onStartDateSwitch(event: WechatMiniprogram.SwitchChange) {
+    this.setData({
+      hasStartDate: event.detail.value,
+      hasStartTime: event.detail.value ? this.data.hasStartTime : false
     });
   },
 
@@ -177,12 +209,28 @@ Page({
     });
   },
 
+  computeStartAt(): number | undefined {
+    return this.data.hasStartDate
+      ? new Date(
+          `${this.data.startDate}T${this.data.hasStartTime ? this.data.startTime : '00:00'}:00+08:00`
+        ).getTime()
+      : undefined;
+  },
+
   computeDueAt(): number | undefined {
     return this.data.hasDueDate
       ? new Date(
-          `${this.data.date}T${this.data.hasDueTime ? this.data.time : '23:59'}:00+08:00`
+          `${this.data.dueDate}T${this.data.hasDueTime ? this.data.dueTime : '23:59'}:00+08:00`
         ).getTime()
       : undefined;
+  },
+
+  validateSchedule(startAt: number | undefined, dueAt: number | undefined): boolean {
+    if (startAt !== undefined && dueAt !== undefined && startAt > dueAt) {
+      void wx.showToast({ title: '开始时间不能晚于截止时间', icon: 'none' });
+      return false;
+    }
+    return true;
   },
 
   async onSave() {
@@ -191,7 +239,11 @@ Page({
       void wx.showToast({ title: '请输入待办标题', icon: 'none' });
       return;
     }
+    const startAt = this.computeStartAt();
     const dueAt = this.computeDueAt();
+    if (!this.validateSchedule(startAt, dueAt)) {
+      return;
+    }
     if (this.data.reminderEnabled && (dueAt === undefined || dueAt - Date.now() < 10 * 60 * 1000)) {
       void wx.showToast({ title: '提醒时间至少需要提前 10 分钟', icon: 'none' });
       return;
@@ -200,19 +252,19 @@ Page({
       this.setData({ showScopeDialog: true });
       return;
     }
-    await this.saveTask(title, dueAt);
+    await this.saveTask(title, startAt, dueAt);
   },
 
   onScopeOnlyThis() {
     this.setData({ showScopeDialog: false });
-    void this.saveTask(this.data.title.trim(), this.computeDueAt());
+    void this.saveTask(this.data.title.trim(), this.computeStartAt(), this.computeDueAt());
   },
 
   onScopeCancel() {
     this.setData({ showScopeDialog: false });
   },
 
-  async saveTask(title: string, dueAt: number | undefined) {
+  async saveTask(title: string, startAt: number | undefined, dueAt: number | undefined) {
     this.setData({ saving: true });
     try {
       const isEdit = this.data.id.length > 0;
@@ -230,9 +282,11 @@ Page({
         const input: UpdateTaskInput = {
           title,
           priority: PRIORITIES[this.data.priorityIndex] ?? 'MEDIUM',
+          startHasTime: this.data.hasStartTime,
           dueHasTime: this.data.hasDueTime,
           reminderEnabled: reminderAccepted,
           ...(this.data.notes.trim().length === 0 ? {} : { notes: this.data.notes.trim() }),
+          ...(startAt === undefined ? {} : { startAt }),
           ...(dueAt === undefined ? {} : { dueAt }),
           ...(this.data.locationName.trim().length === 0
             ? {}
@@ -244,10 +298,12 @@ Page({
         const baseInput: CreateTaskInput = {
           title,
           priority: PRIORITIES[this.data.priorityIndex] ?? 'MEDIUM',
+          startHasTime: this.data.hasStartTime,
           dueHasTime: this.data.hasDueTime,
           tagIds: [],
           reminderEnabled: reminderAccepted,
           ...(this.data.notes.trim().length === 0 ? {} : { notes: this.data.notes.trim() }),
+          ...(startAt === undefined ? {} : { startAt }),
           ...(dueAt === undefined ? {} : { dueAt }),
           ...(this.data.locationName.trim().length === 0
             ? {}
@@ -264,18 +320,18 @@ Page({
                   repeat === 'DAILY'
                     ? {
                         frequency: 'DAILY' as const,
-                        startDate: this.data.date
+                        startDate: this.data.dueDate
                       }
                     : repeat === 'WEEKLY'
                       ? {
                           frequency: 'WEEKLY' as const,
-                          startDate: this.data.date,
-                          weekdays: [new Date(`${this.data.date}T00:00:00+08:00`).getDay() || 7]
+                          startDate: this.data.dueDate,
+                          weekdays: [new Date(`${this.data.dueDate}T00:00:00+08:00`).getDay() || 7]
                         }
                       : {
                           frequency: 'MONTHLY' as const,
-                          startDate: this.data.date,
-                          monthDay: Number(this.data.date.slice(-2))
+                          startDate: this.data.dueDate,
+                          monthDay: Number(this.data.dueDate.slice(-2))
                         }
               })
         };

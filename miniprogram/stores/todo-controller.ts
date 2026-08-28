@@ -4,7 +4,7 @@ import {
   type CreateTaskInput,
   type UpdateTaskInput
 } from '../services/api.js';
-import { dateKeyFromTimestamp, todayKey } from '../utils/calendar.js';
+import { taskBelongsToCalendarDay, taskDateSpan } from '../utils/calendar.js';
 import {
   acknowledgeMutation,
   appendTasks,
@@ -76,14 +76,17 @@ function replaceTask(state: TodoState, task: ClientTask): TodoState {
   };
 }
 
-function taskDayKey(task: ClientTask, now = Date.now()): string | null {
-  if (task.occurrenceDate !== undefined) {
-    return task.occurrenceDate;
+function taskOverlapsRange(
+  task: ClientTask,
+  fromKey: string,
+  toKey: string,
+  now = Date.now()
+): boolean {
+  const span = taskDateSpan(task, now);
+  if (span === null) {
+    return false;
   }
-  if (task.dueAt !== undefined) {
-    return dateKeyFromTimestamp(task.dueAt);
-  }
-  return todayKey(now);
+  return span.from <= toKey && span.to >= fromKey;
 }
 
 export class TodoController {
@@ -141,7 +144,7 @@ export class TodoController {
     }
     const page = await apiClient.listTasks({ dueOn });
     const now = Date.now();
-    const kept = this.state.tasks.filter((task) => taskDayKey(task, now) !== dueOn);
+    const kept = this.state.tasks.filter((task) => !taskBelongsToCalendarDay(task, dueOn, now));
     const byId = new Map(kept.map((task) => [task.id, task] as const));
     for (const task of page.tasks) {
       byId.set(task.id, task);
@@ -160,6 +163,27 @@ export class TodoController {
       tasks: [task, ...this.state.tasks]
     });
     return task;
+  }
+
+  /** Fetch tasks overlapping a Shanghai date range and merge into the local cache. */
+  public async refreshRange(dueFrom: string, dueTo: string): Promise<readonly ClientTask[]> {
+    if (apiClient.getStoredToken() === null) {
+      await apiClient.login();
+    }
+    const page = await apiClient.listTasks({ dueFrom, dueTo });
+    const now = Date.now();
+    const kept = this.state.tasks.filter((task) => !taskOverlapsRange(task, dueFrom, dueTo, now));
+    const byId = new Map(kept.map((task) => [task.id, task] as const));
+    for (const task of page.tasks) {
+      byId.set(task.id, task);
+    }
+    const tasks = [...byId.values()];
+    this.publish({
+      ...this.state,
+      tasks,
+      syncedAt: now
+    });
+    return page.tasks;
   }
 
   public async loadMore(): Promise<void> {

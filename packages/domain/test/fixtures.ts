@@ -7,6 +7,7 @@ export function createTask(overrides: Partial<Task> = {}): Task {
     id: 'task-1',
     userId: 'user-1',
     title: '测试待办',
+    startHasTime: false,
     dueHasTime: false,
     priority: 'MEDIUM',
     status: 'TODO',

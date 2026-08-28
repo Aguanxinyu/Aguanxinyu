@@ -20,6 +20,11 @@
     {{pendingCount}} 项操作将在恢复网络后同步
   </view>
 
+  <view wx:if="{{listFilterName.length > 0}}" class="list-filter-chip">
+    <text>清单：{{listFilterName}}</text>
+    <button class="list-filter-clear" bindtap="onClearListFilter" aria-label="清除清单筛选">×</button>
+  </view>
+
   <view class="task-list">
     <view
       wx:for="{{tasks}}"
@@ -126,11 +131,12 @@
         <view
           wx:for="{{monthDays}}"
           wx:key="key"
-          class="month-day {{item.inMonth ? '' : 'month-day--muted'}} {{item.key === selectedDate ? 'month-day--active' : ''}} {{item.isToday ? 'month-day--today' : ''}}"
+          class="month-day {{item.inMonth ? '' : 'month-day--muted'}} {{item.key === selectedDate ? 'month-day--active' : ''}} {{item.isToday ? 'month-day--today' : ''}} {{item.hasTasks ? 'month-day--has-tasks' : ''}}"
           data-key="{{item.key}}"
           bindtap="onSelectDay"
         >
-          {{item.label}}
+          <text class="month-day-number">{{item.label}}</text>
+          <view wx:if="{{item.hasTasks}}" class="month-day-dot" aria-hidden="true"></view>
         </view>
       </view>
       <button class="ghost-button today-jump" bindtap="onJumpToday">回到今天</button>

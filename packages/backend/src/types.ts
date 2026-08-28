@@ -82,6 +82,7 @@ export interface TaskTemplate {
   readonly listId: string;
   readonly tagIds: readonly string[];
   readonly location?: Task['location'];
+  readonly startHasTime: boolean;
   readonly dueHasTime: boolean;
 }
 

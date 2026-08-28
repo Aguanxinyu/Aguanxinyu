@@ -66,6 +66,35 @@
   font-size: 24rpx;
 }
 
+.list-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8rpx;
+  margin-top: 18rpx;
+  padding: 10rpx 12rpx 10rpx 18rpx;
+  border-radius: 999rpx;
+  background: var(--accent-soft);
+  color: var(--accent-deep);
+  font-size: 24rpx;
+}
+
+.list-filter-clear {
+  width: 44rpx;
+  height: 44rpx;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(15, 118, 110, 0.12);
+  color: var(--accent-deep);
+  font-size: 28rpx;
+  line-height: 40rpx;
+}
+
+.list-filter-clear::after {
+  border: 0;
+}
+
 .task-list {
   margin-top: 28rpx;
   border-top: 1rpx solid var(--line);
@@ -371,13 +400,36 @@
 }
 
 .month-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   height: 72rpx;
   border-radius: 8rpx;
   color: var(--ink);
   font-size: 26rpx;
   font-weight: 600;
-  line-height: 72rpx;
-  text-align: center;
+}
+
+.month-day-number {
+  line-height: 1.2;
+}
+
+.month-day-dot {
+  width: 8rpx;
+  height: 8rpx;
+  margin-top: 6rpx;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.month-day--has-tasks:not(.month-day--active) {
+  background: rgba(15, 118, 110, 0.1);
+  color: var(--accent-deep);
+}
+
+.month-day--has-tasks.month-day--active .month-day-dot {
+  background: #ffffff;
 }
 
 .month-day--muted {

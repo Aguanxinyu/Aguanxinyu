@@ -37,20 +37,37 @@
       </picker>
     </view>
     <view class="field field--row">
-      <text class="label">设置日期</text>
+      <text class="label">开始时间</text>
+      <switch
+        color="#2563EB"
+        checked="{{hasStartDate}}"
+        bindchange="onStartDateSwitch"
+        aria-label="设置开始时间"
+      />
+    </view>
+    <view wx:if="{{hasStartDate}}" class="inline-fields">
+      <picker mode="date" value="{{startDate}}" bindchange="onStartDateChange" aria-label="选择开始日期">
+        <view class="date-chip">{{startDate}}</view>
+      </picker>
+      <picker mode="time" value="{{startTime}}" bindchange="onStartTimeChange" aria-label="选择开始时间">
+        <view class="date-chip">{{hasStartTime ? startTime : '选择时间'}}</view>
+      </picker>
+    </view>
+    <view class="field field--row">
+      <text class="label">截止时间</text>
       <switch
         color="#2563EB"
         checked="{{hasDueDate}}"
         bindchange="onDueDateSwitch"
-        aria-label="设置截止日期"
+        aria-label="设置截止时间"
       />
     </view>
     <view wx:if="{{hasDueDate}}" class="inline-fields">
-      <picker mode="date" value="{{date}}" bindchange="onDateChange" aria-label="选择日期">
-        <view class="date-chip">{{date}}</view>
+      <picker mode="date" value="{{dueDate}}" bindchange="onDueDateChange" aria-label="选择截止日期">
+        <view class="date-chip">{{dueDate}}</view>
       </picker>
-      <picker mode="time" value="{{time}}" bindchange="onTimeChange" aria-label="选择时间">
-        <view class="date-chip">{{hasDueTime ? time : '选择时间'}}</view>
+      <picker mode="time" value="{{dueTime}}" bindchange="onDueTimeChange" aria-label="选择截止时间">
+        <view class="date-chip">{{hasDueTime ? dueTime : '选择时间'}}</view>
       </picker>
     </view>
     <view class="field field--row">

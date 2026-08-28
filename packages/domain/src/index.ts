@@ -13,6 +13,8 @@ export {
   shanghaiDateKey,
   sortTasks,
   taskBelongsToDate,
+  taskDateSpan,
+  taskOverlapsDateRange,
   taskSortTuple,
   type TaskGroup,
   type TaskSortTuple

@@ -8,6 +8,8 @@ export interface ClientTask {
   readonly notes?: string;
   readonly priority: ClientPriority;
   readonly status: ClientTaskStatus;
+  readonly startAt?: number;
+  readonly startHasTime: boolean;
   readonly dueAt?: number;
   readonly dueHasTime: boolean;
   readonly listId: string;

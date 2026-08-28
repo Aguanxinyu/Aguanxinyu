@@ -78,6 +78,16 @@ export function validateTaskInput(input: unknown): ValidationResult {
     issues = withIssue(issues, 'dueAt', 'DUE_AT_REQUIRED');
   }
 
+  if (input.startHasTime === true && typeof input.startAt !== 'number') {
+    issues = withIssue(issues, 'startAt', 'START_AT_REQUIRED');
+  }
+
+  const startAt = input.startAt;
+  const dueAt = input.dueAt;
+  if (typeof startAt === 'number' && typeof dueAt === 'number' && startAt > dueAt) {
+    issues = withIssue(issues, 'startAt', 'START_AFTER_DUE');
+  }
+
   if (isRecord(input.location) && input.location.source === 'MAP') {
     const latitude = input.location.latitude;
     const longitude = input.location.longitude;

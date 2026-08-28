@@ -1,13 +1,52 @@
 import { ApiClientError, apiClient, type ClientList } from '../../services/api.js';
+import type { ClientTask } from '../../stores/todo-store.js';
 import { getCustomNavInset } from '../../utils/layout.js';
+
+const LIST_FILTER_KEY = 'today-todo:list-filter';
+
+interface ListRow extends ClientList {
+  readonly openCount: number;
+  readonly totalCount: number;
+}
 
 function messageFor(error: unknown): string {
   return error instanceof ApiClientError ? error.message : '操作失败，请稍后重试';
 }
 
+function buildListRows(
+  lists: readonly ClientList[],
+  tasks: readonly ClientTask[]
+): readonly ListRow[] {
+  const counts = new Map<string, { open: number; total: number }>();
+  for (const list of lists) {
+    counts.set(list.id, { open: 0, total: 0 });
+  }
+  for (const task of tasks) {
+    if (task.status === 'TRASHED') {
+      continue;
+    }
+    const bucket = counts.get(task.listId);
+    if (bucket === undefined) {
+      continue;
+    }
+    bucket.total += 1;
+    if (task.status === 'TODO') {
+      bucket.open += 1;
+    }
+  }
+  return lists.map((list) => {
+    const bucket = counts.get(list.id) ?? { open: 0, total: 0 };
+    return {
+      ...list,
+      openCount: bucket.open,
+      totalCount: bucket.total
+    };
+  });
+}
+
 Page({
   data: {
-    lists: [] as readonly ClientList[],
+    lists: [] as readonly ListRow[],
     newName: '',
     loading: false,
     navPaddingTop: 88
@@ -24,7 +63,8 @@ Page({
   async loadLists() {
     this.setData({ loading: true });
     try {
-      this.setData({ lists: await apiClient.listLists() });
+      const [lists, taskPage] = await Promise.all([apiClient.listLists(), apiClient.listTasks()]);
+      this.setData({ lists: buildListRows(lists, taskPage.tasks) });
     } catch (error) {
       void wx.showToast({ title: messageFor(error), icon: 'none' });
     } finally {
@@ -44,12 +84,25 @@ Page({
     try {
       const list = await apiClient.createList(name);
       this.setData({
-        lists: [...this.data.lists, list],
+        lists: [...this.data.lists, { ...list, openCount: 0, totalCount: 0 }],
         newName: ''
       });
     } catch (error) {
       void wx.showToast({ title: messageFor(error), icon: 'none' });
     }
+  },
+
+  onOpenList(event: WechatMiniprogram.BaseEvent) {
+    const listId = String(event.currentTarget.dataset.id ?? '');
+    const list = this.data.lists.find(({ id }) => id === listId);
+    if (list === undefined) {
+      return;
+    }
+    wx.setStorageSync(LIST_FILTER_KEY, {
+      listId: list.id,
+      listName: list.name
+    });
+    void wx.switchTab({ url: '/pages/todos/index' });
   },
 
   onListMenu(event: WechatMiniprogram.BaseEvent) {
@@ -67,6 +120,14 @@ Page({
             this.setData({
               lists: this.data.lists.filter(({ id }) => id !== listId)
             });
+            const filter = wx.getStorageSync<unknown>(LIST_FILTER_KEY);
+            if (
+              typeof filter === 'object' &&
+              filter !== null &&
+              (filter as Readonly<Record<string, unknown>>).listId === listId
+            ) {
+              wx.removeStorageSync(LIST_FILTER_KEY);
+            }
           })
           .catch((error: unknown) => {
             void wx.showToast({ title: messageFor(error), icon: 'none' });

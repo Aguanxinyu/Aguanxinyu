@@ -46,6 +46,8 @@ interface TaskRow {
   notes: string | null;
   due_at: number | null;
   due_has_time: boolean;
+  start_at: number | null;
+  start_has_time: boolean;
   priority: Task['priority'];
   status: Task['status'];
   original_status: ActiveTaskStatus | null;
@@ -140,6 +142,8 @@ function toTaskRecord(row: TaskRow): Task {
     userId: row.user_id,
     title: row.title,
     ...(row.notes !== null ? { notes: row.notes } : {}),
+    ...(row.start_at !== null ? { startAt: row.start_at } : {}),
+    startHasTime: row.start_has_time,
     ...(row.due_at !== null ? { dueAt: row.due_at } : {}),
     dueHasTime: row.due_has_time,
     priority: row.priority,
@@ -388,13 +392,15 @@ export class PostgresDatabase implements BackendDatabase {
   public async saveTask(task: Task): Promise<void> {
     await this.pool.query(
       `INSERT INTO tasks (
-         user_id, id, title, notes, due_at, due_has_time, priority, status, original_status,
+         user_id, id, title, notes, start_at, start_has_time, due_at, due_has_time, priority, status, original_status,
          list_id, tag_ids, location, series_id, occurrence_date, remind_at,
          version, created_at, updated_at, completed_at, trashed_at, purge_after_at
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
        ON CONFLICT (user_id, id) DO UPDATE SET
          title = EXCLUDED.title,
          notes = EXCLUDED.notes,
+         start_at = EXCLUDED.start_at,
+         start_has_time = EXCLUDED.start_has_time,
          due_at = EXCLUDED.due_at,
          due_has_time = EXCLUDED.due_has_time,
          priority = EXCLUDED.priority,
@@ -416,6 +422,8 @@ export class PostgresDatabase implements BackendDatabase {
         task.id,
         task.title,
         task.notes ?? null,
+        task.startAt ?? null,
+        task.startHasTime,
         task.dueAt ?? null,
         task.dueHasTime,
         task.priority,

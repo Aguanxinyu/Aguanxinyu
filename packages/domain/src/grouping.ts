@@ -23,15 +23,54 @@ export function shanghaiDateKey(timestamp: number): string {
   return `${String(year)}-${month}-${day}`;
 }
 
+function compareDateKeys(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+/** Inclusive Shanghai date span for calendar placement. */
+export function taskDateSpan(
+  task: Task,
+  now: number
+): { readonly from: string; readonly to: string } | null {
+  if (task.occurrenceDate !== undefined) {
+    return { from: task.occurrenceDate, to: task.occurrenceDate };
+  }
+  const startKey = task.startAt === undefined ? undefined : shanghaiDateKey(task.startAt);
+  const dueKey = task.dueAt === undefined ? undefined : shanghaiDateKey(task.dueAt);
+  if (startKey !== undefined && dueKey !== undefined) {
+    return startKey <= dueKey ? { from: startKey, to: dueKey } : { from: dueKey, to: startKey };
+  }
+  if (dueKey !== undefined) {
+    return { from: dueKey, to: dueKey };
+  }
+  if (startKey !== undefined) {
+    return { from: startKey, to: startKey };
+  }
+  const today = shanghaiDateKey(now);
+  return { from: today, to: today };
+}
+
 /** Whether a task belongs on a Shanghai calendar day (including undated → today). */
 export function taskBelongsToDate(task: Task, dueOn: string, now: number): boolean {
-  if (task.occurrenceDate !== undefined) {
-    return task.occurrenceDate === dueOn;
+  const span = taskDateSpan(task, now);
+  if (span === null) {
+    return false;
   }
-  if (task.dueAt !== undefined) {
-    return shanghaiDateKey(task.dueAt) === dueOn;
+  return compareDateKeys(span.from, dueOn) <= 0 && compareDateKeys(dueOn, span.to) <= 0;
+}
+
+/** Whether a task appears on any day within an inclusive Shanghai date range. */
+export function taskOverlapsDateRange(
+  task: Task,
+  fromKey: string,
+  toKey: string,
+  now: number
+): boolean {
+  const span = taskDateSpan(task, now);
+  if (span === null) {
+    return false;
   }
-  return dueOn === shanghaiDateKey(now);
+  return compareDateKeys(span.from, toKey) <= 0 && compareDateKeys(fromKey, span.to) <= 0;
 }
 
 export function getTaskGroup(task: Task, now: number): TaskGroup | null {

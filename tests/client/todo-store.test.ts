@@ -16,6 +16,7 @@ describe('mini program todo store', () => {
     priority: 'MEDIUM' as const,
     status: 'TODO' as const,
     dueHasTime: false,
+    startHasTime: false,
     listId: 'inbox',
     tagIds: [],
     version: 1,

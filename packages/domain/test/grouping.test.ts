@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { getTaskGroup, shanghaiDateKey, sortTasks, taskBelongsToDate } from '../src/grouping.js';
+import {
+  getTaskGroup,
+  shanghaiDateKey,
+  sortTasks,
+  taskBelongsToDate,
+  taskOverlapsDateRange
+} from '../src/grouping.js';
 import { createTask } from './fixtures.js';
 
 describe('task grouping and sorting', () => {
@@ -21,6 +27,29 @@ describe('task grouping and sorting', () => {
     expect(taskBelongsToDate(createTask({ occurrenceDate: '2026-07-30' }), '2026-07-30', now)).toBe(
       true
     );
+  });
+
+  it('matches tasks across a start-to-due date span', () => {
+    const task = createTask({
+      startAt: Date.parse('2026-07-28T01:00:00+08:00'),
+      dueAt: Date.parse('2026-07-30T18:00:00+08:00')
+    });
+    expect(taskBelongsToDate(task, '2026-07-27', now)).toBe(false);
+    expect(taskBelongsToDate(task, '2026-07-28', now)).toBe(true);
+    expect(taskBelongsToDate(task, '2026-07-29', now)).toBe(true);
+    expect(taskBelongsToDate(task, '2026-07-30', now)).toBe(true);
+    expect(taskBelongsToDate(task, '2026-07-31', now)).toBe(false);
+  });
+
+  it('overlaps date ranges for calendar queries', () => {
+    const task = createTask({
+      startAt: Date.parse('2026-07-28T01:00:00+08:00'),
+      dueAt: Date.parse('2026-07-30T18:00:00+08:00')
+    });
+    expect(taskOverlapsDateRange(task, '2026-07-01', '2026-07-27', now)).toBe(false);
+    expect(taskOverlapsDateRange(task, '2026-07-29', '2026-08-01', now)).toBe(true);
+    expect(taskOverlapsDateRange(createTask(), '2026-07-31', '2026-07-31', now)).toBe(true);
+    expect(taskOverlapsDateRange(createTask(), '2026-07-30', '2026-07-30', now)).toBe(false);
   });
 
   it.each([

@@ -25,6 +25,8 @@ export interface Task {
   readonly userId: string;
   readonly title: string;
   readonly notes?: string;
+  readonly startAt?: number;
+  readonly startHasTime: boolean;
   readonly dueAt?: number;
   readonly dueHasTime: boolean;
   readonly priority: Priority;

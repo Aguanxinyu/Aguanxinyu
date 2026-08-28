@@ -1,7 +1,14 @@
+.intro {
+  margin-top: 28rpx;
+  padding: 24rpx 26rpx;
+  color: var(--ink-soft);
+  font-size: 24rpx;
+  line-height: 1.6;
+}
+
 .create-list {
   display: flex;
   align-items: center;
-  margin-top: 36rpx;
   padding: 18rpx 18rpx 18rpx 26rpx;
 }
 
@@ -22,14 +29,18 @@
 
 .list-row {
   display: flex;
-  min-height: 106rpx;
+  min-height: 118rpx;
   align-items: center;
-  padding: 18rpx 24rpx;
+  padding: 18rpx 20rpx 18rpx 24rpx;
   border-bottom: 1rpx solid var(--line);
 }
 
 .list-row:last-child {
   border-bottom: 0;
+}
+
+.list-row--inbox {
+  background: rgba(15, 118, 110, 0.06);
 }
 
 .list-icon {
@@ -45,16 +56,35 @@
   text-align: center;
 }
 
-.list-name {
+.list-copy {
   flex: 1;
+  min-width: 0;
   margin-left: 20rpx;
+}
+
+.list-name {
+  display: block;
   font-size: 30rpx;
+  font-weight: 600;
+}
+
+.list-meta {
+  display: block;
+  margin-top: 8rpx;
+  color: var(--ink-soft);
+  font-size: 22rpx;
+}
+
+.list-chevron {
+  margin-right: 4rpx;
+  color: rgba(16, 36, 58, 0.35);
+  font-size: 34rpx;
 }
 
 .list-menu {
   width: 72rpx;
   height: 72rpx;
-  margin: 0;
+  margin: 0 0 0 4rpx;
   padding: 0;
   border: 0;
   border-radius: 8rpx;

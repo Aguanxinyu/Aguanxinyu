@@ -1,0 +1,3 @@
+ALTER TABLE tasks
+  ADD COLUMN start_at BIGINT,
+  ADD COLUMN start_has_time BOOLEAN NOT NULL DEFAULT false;

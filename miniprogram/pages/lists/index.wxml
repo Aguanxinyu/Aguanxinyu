@@ -1,31 +1,26 @@
 <view class="page" style="padding-top: {{navPaddingTop}}px;">
   <view class="brand">今日待办</view>
-  <view class="page-subtitle">清单 · 按生活场景整理</view>
-
-  <view class="card create-list">
-    <input
-      value="{{newName}}"
-      placeholder="新清单名称"
-      maxlength="20"
-      aria-label="新清单名称"
-      bindinput="onNameInput"
-      bindconfirm="onCreate"
-    />
-    <button class="ghost-button" bindtap="onCreate">创建</button>
+  <view class="page-subtitle">清单 · 按场景筛选待办</view>
+  <view class="intro card">
+    清单不是独立任务池，而是待办页的筛选视图。点进某个清单，会在「待办」里只看该清单下的任务；删除清单后，其中任务会回到收件箱。
   </view>
 
-  <view class="section-title">我的清单 · {{lists.length}}</view>
+  <view class="section-title">打开清单</view>
   <view class="card list-card">
     <view
       wx:for="{{lists}}"
       wx:key="id"
       wx:for-item="item"
-      class="list-row"
+      class="list-row {{item.isInbox ? 'list-row--inbox' : ''}}"
       data-id="{{item.id}}"
-      bindlongpress="onListMenu"
+      bindtap="onOpenList"
     >
       <view class="list-icon">{{item.isInbox ? '收' : '清'}}</view>
-      <text class="list-name">{{item.name}}</text>
+      <view class="list-copy">
+        <text class="list-name">{{item.name}}</text>
+        <text class="list-meta">{{item.openCount}} 项未完成 · 共 {{item.totalCount}} 项</text>
+      </view>
+      <text class="list-chevron" aria-hidden="true">›</text>
       <button
         wx:if="{{!item.isInbox}}"
         class="list-menu"
@@ -39,5 +34,18 @@
     <view wx:if="{{!loading && lists.length === 0}}" class="empty">
       暂无清单
     </view>
+  </view>
+
+  <view class="section-title">新建清单</view>
+  <view class="card create-list">
+    <input
+      value="{{newName}}"
+      placeholder="例如：工作、学习、家务"
+      maxlength="20"
+      aria-label="新清单名称"
+      bindinput="onNameInput"
+      bindconfirm="onCreate"
+    />
+    <button class="ghost-button" bindtap="onCreate">创建</button>
   </view>
 </view>

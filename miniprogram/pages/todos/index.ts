@@ -2,16 +2,18 @@ import { ApiClientError } from '../../services/api.js';
 import { todoController } from '../../stores/todo-controller.js';
 import type { ClientTask, TodoState } from '../../stores/todo-store.js';
 import {
+  applyTaskMarkers,
   buildMonthGrid,
   buildWeekStrip,
-  dateKeyFromTimestamp,
+  collectDatesWithTasks,
   dayStartMs,
   formatDaySubtitle,
   formatDayTitle,
-  formatDueLabel,
+  formatScheduleLabel,
   monthKeyFromDateKey,
   monthTitle,
   shiftDateKey,
+  taskBelongsToCalendarDay,
   todayKey,
   type DayCell
 } from '../../utils/calendar.js';
@@ -21,7 +23,6 @@ interface DisplayTask extends ClientTask {
   readonly dueLabel: string;
   readonly done: boolean;
   readonly priorityLabel: string;
-  readonly dayKey: string | null;
 }
 
 const PRIORITY_LABELS: Readonly<Record<ClientTask['priority'], string>> = {
@@ -31,18 +32,37 @@ const PRIORITY_LABELS: Readonly<Record<ClientTask['priority'], string>> = {
 };
 
 const WEEKDAY_LABELS = ['日', '一', '二', '三', '四', '五', '六'] as const;
+const LIST_FILTER_KEY = 'today-todo:list-filter';
+
+interface ListFilter {
+  readonly listId: string;
+  readonly listName: string;
+}
+
+function readListFilter(): ListFilter | null {
+  const raw = wx.getStorageSync<unknown>(LIST_FILTER_KEY);
+  if (typeof raw !== 'object' || raw === null) {
+    return null;
+  }
+  const candidate = raw as Readonly<Record<string, unknown>>;
+  if (typeof candidate.listId !== 'string' || typeof candidate.listName !== 'string') {
+    return null;
+  }
+  return { listId: candidate.listId, listName: candidate.listName };
+}
 
 function displayTask(task: ClientTask): DisplayTask {
-  const dayKey =
-    task.occurrenceDate ?? (task.dueAt === undefined ? null : dateKeyFromTimestamp(task.dueAt));
-  const dueLabel =
-    task.dueAt === undefined ? '未设置时间' : formatDueLabel(task.dueAt, task.dueHasTime);
+  const dueLabel = formatScheduleLabel({
+    startHasTime: task.startHasTime,
+    dueHasTime: task.dueHasTime,
+    ...(task.startAt === undefined ? {} : { startAt: task.startAt }),
+    ...(task.dueAt === undefined ? {} : { dueAt: task.dueAt })
+  });
   return {
     ...task,
     dueLabel,
     done: task.status === 'DONE',
-    priorityLabel: PRIORITY_LABELS[task.priority],
-    dayKey
+    priorityLabel: PRIORITY_LABELS[task.priority]
   };
 }
 
@@ -50,9 +70,21 @@ function messageFor(error: unknown): string {
   return error instanceof ApiClientError ? error.message : '操作失败，请稍后重试';
 }
 
+function monthGridRange(monthCursor: string): { readonly from: string; readonly to: string } {
+  const grid = buildMonthGrid(monthCursor);
+  const first = grid[0]?.key;
+  const last = grid[grid.length - 1]?.key;
+  if (first === undefined || last === undefined) {
+    const key = monthKeyFromDateKey(monthCursor);
+    return { from: key, to: key };
+  }
+  return { from: first, to: last };
+}
+
 function calendarView(
   selectedDate: string,
   monthCursor: string,
+  monthTasks: readonly ClientTask[],
   now = Date.now()
 ): {
   readonly weekDays: readonly DayCell[];
@@ -62,9 +94,11 @@ function calendarView(
   readonly daySubtitle: string;
   readonly isSelectedToday: boolean;
 } {
+  const range = monthGridRange(monthCursor);
+  const datesWithTasks = collectDatesWithTasks(monthTasks, range.from, range.to, now);
   return {
     weekDays: buildWeekStrip(selectedDate, now),
-    monthDays: buildMonthGrid(monthCursor, now),
+    monthDays: applyTaskMarkers(buildMonthGrid(monthCursor, now), datesWithTasks),
     monthTitle: monthTitle(monthCursor),
     dayTitle: formatDayTitle(selectedDate, now),
     daySubtitle: formatDaySubtitle(selectedDate),
@@ -75,29 +109,35 @@ function calendarView(
 function tasksForDay(
   tasks: readonly ClientTask[],
   selectedDate: string,
+  listFilter: ListFilter | null,
   now = Date.now()
 ): readonly DisplayTask[] {
-  const today = todayKey(now);
   return tasks
     .filter(({ status }) => status !== 'TRASHED')
-    .map(displayTask)
-    .filter((task) => {
-      if (task.dayKey === selectedDate) {
-        return true;
-      }
-      return task.dayKey === null && selectedDate === today;
-    });
+    .filter((task) => (listFilter === null ? true : task.listId === listFilter.listId))
+    .filter((task) => taskBelongsToCalendarDay(task, selectedDate, now))
+    .map(displayTask);
 }
 
-function emptyLabelFor(selectedDate: string, now = Date.now()): string {
+function emptyLabelFor(
+  selectedDate: string,
+  listFilter: ListFilter | null,
+  now = Date.now()
+): string {
+  const dayLabel = selectedDate === todayKey(now) ? '今天' : formatDayTitle(selectedDate, now);
+  if (listFilter !== null) {
+    return `${dayLabel}在「${listFilter.listName}」没有待办`;
+  }
   return selectedDate === todayKey(now)
     ? '今天还没有安排，先写下第一件事'
-    : `${formatDayTitle(selectedDate, now)}没有记录的安排`;
+    : `${dayLabel}没有记录的安排`;
 }
 
 let unsubscribe: (() => void) | undefined;
 let cachedTasks: readonly ClientTask[] = [];
+let monthTasks: readonly ClientTask[] = [];
 let dayLoadToken = 0;
+let monthLoadToken = 0;
 
 Page({
   data: {
@@ -112,10 +152,12 @@ Page({
     daySubtitle: '',
     isSelectedToday: true,
     emptyLabel: '今天还没有安排，先写下第一件事',
+    listFilterName: '',
     tasks: [] as readonly DisplayTask[],
     quickTitle: '',
     loading: false,
     loadingDay: false,
+    loadingMonth: false,
     loadingMore: false,
     hasMore: false,
     pendingCount: 0,
@@ -126,20 +168,26 @@ Page({
     const selectedDate = todayKey();
     const monthCursor = monthKeyFromDateKey(selectedDate);
     const navPaddingTop = getCustomNavInset();
+    const listFilter = readListFilter();
     this.setData({
       selectedDate,
       monthCursor,
       navPaddingTop,
-      ...calendarView(selectedDate, monthCursor),
-      emptyLabel: emptyLabelFor(selectedDate)
+      listFilterName: listFilter?.listName ?? '',
+      ...calendarView(selectedDate, monthCursor, monthTasks),
+      emptyLabel: emptyLabelFor(selectedDate, listFilter)
     });
     unsubscribe = todoController.subscribe((state: TodoState) => {
       cachedTasks = state.tasks;
+      const filter = readListFilter();
       this.setData({
-        tasks: tasksForDay(state.tasks, this.data.selectedDate),
+        tasks: tasksForDay(state.tasks, this.data.selectedDate, filter),
         pendingCount: state.pendingMutations.length,
         hasMore: state.hasMore,
-        emptyLabel: emptyLabelFor(this.data.selectedDate)
+        emptyLabel: emptyLabelFor(this.data.selectedDate, filter),
+        ...(this.data.calendarOpen
+          ? calendarView(this.data.selectedDate, this.data.monthCursor, monthTasks)
+          : {})
       });
     });
   },
@@ -152,8 +200,27 @@ Page({
   onShow() {
     const selectedDate = this.data.selectedDate;
     const monthCursor = this.data.monthCursor;
-    this.setData(calendarView(selectedDate, monthCursor));
+    const listFilter = readListFilter();
+    this.setData({
+      listFilterName: listFilter?.listName ?? '',
+      ...calendarView(selectedDate, monthCursor, monthTasks),
+      tasks: tasksForDay(cachedTasks, selectedDate, listFilter),
+      emptyLabel: emptyLabelFor(selectedDate, listFilter)
+    });
     void this.loadSelectedDay(selectedDate);
+    if (this.data.calendarOpen) {
+      void this.loadMonthTasks(monthCursor);
+    }
+  },
+
+  onClearListFilter() {
+    wx.removeStorageSync(LIST_FILTER_KEY);
+    const selectedDate = this.data.selectedDate;
+    this.setData({
+      listFilterName: '',
+      tasks: tasksForDay(cachedTasks, selectedDate, null),
+      emptyLabel: emptyLabelFor(selectedDate, null)
+    });
   },
 
   async loadSelectedDay(selectedDate: string): Promise<void> {
@@ -168,9 +235,10 @@ Page({
       if (token !== dayLoadToken) {
         return;
       }
+      const listFilter = readListFilter();
       this.setData({
-        tasks: tasksForDay(todoController.getState().tasks, selectedDate),
-        emptyLabel: emptyLabelFor(selectedDate)
+        tasks: tasksForDay(todoController.getState().tasks, selectedDate, listFilter),
+        emptyLabel: emptyLabelFor(selectedDate, listFilter)
       });
     } catch (error) {
       if (token === dayLoadToken) {
@@ -183,9 +251,33 @@ Page({
     }
   },
 
+  async loadMonthTasks(monthCursor: string): Promise<void> {
+    const token = ++monthLoadToken;
+    this.setData({ loadingMonth: true });
+    try {
+      const { from, to } = monthGridRange(monthCursor);
+      monthTasks = await todoController.refreshRange(from, to);
+      if (token !== monthLoadToken) {
+        return;
+      }
+      this.setData(calendarView(this.data.selectedDate, monthCursor, monthTasks));
+    } catch (error) {
+      if (token === monthLoadToken) {
+        void wx.showToast({ title: messageFor(error), icon: 'none' });
+      }
+    } finally {
+      if (token === monthLoadToken) {
+        this.setData({ loadingMonth: false });
+      }
+    }
+  },
+
   async onPullDownRefresh() {
     try {
       await this.loadSelectedDay(this.data.selectedDate);
+      if (this.data.calendarOpen) {
+        await this.loadMonthTasks(this.data.monthCursor);
+      }
     } finally {
       void wx.stopPullDownRefresh();
     }
@@ -200,17 +292,23 @@ Page({
     if (title.length === 0 || this.data.loading) {
       return;
     }
+    const listFilter = readListFilter();
     this.setData({ loading: true });
     try {
       await todoController.create({
         title,
         priority: 'MEDIUM',
+        startHasTime: false,
         dueAt: dayStartMs(this.data.selectedDate) + 18 * 60 * 60 * 1000,
         dueHasTime: false,
-        tagIds: []
+        tagIds: [],
+        ...(listFilter === null ? {} : { listId: listFilter.listId })
       });
       this.setData({ quickTitle: '' });
       void wx.showToast({ title: '已添加到这一天', icon: 'success' });
+      if (this.data.calendarOpen) {
+        void this.loadMonthTasks(this.data.monthCursor);
+      }
     } catch (error) {
       void wx.showToast({ title: messageFor(error), icon: 'none' });
     } finally {
@@ -277,11 +375,16 @@ Page({
   },
 
   onToggleCalendar() {
+    const opening = !this.data.calendarOpen;
+    const monthCursor = monthKeyFromDateKey(this.data.selectedDate);
     this.setData({
-      calendarOpen: !this.data.calendarOpen,
-      monthCursor: monthKeyFromDateKey(this.data.selectedDate),
-      ...calendarView(this.data.selectedDate, monthKeyFromDateKey(this.data.selectedDate))
+      calendarOpen: opening,
+      monthCursor,
+      ...calendarView(this.data.selectedDate, monthCursor, monthTasks)
     });
+    if (opening) {
+      void this.loadMonthTasks(monthCursor);
+    }
   },
 
   onCloseCalendar() {
@@ -297,13 +400,14 @@ Page({
       return;
     }
     const monthCursor = monthKeyFromDateKey(key);
+    const listFilter = readListFilter();
     this.setData({
       selectedDate: key,
       monthCursor,
       calendarOpen: false,
-      tasks: tasksForDay(cachedTasks, key),
-      emptyLabel: emptyLabelFor(key),
-      ...calendarView(key, monthCursor)
+      tasks: tasksForDay(cachedTasks, key, listFilter),
+      emptyLabel: emptyLabelFor(key, listFilter),
+      ...calendarView(key, monthCursor, monthTasks)
     });
     void this.loadSelectedDay(key);
   },
@@ -314,21 +418,22 @@ Page({
     const monthCursor = monthKeyFromDateKey(nextMonth);
     this.setData({
       monthCursor,
-      monthDays: buildMonthGrid(monthCursor),
-      monthTitle: monthTitle(monthCursor)
+      ...calendarView(this.data.selectedDate, monthCursor, monthTasks)
     });
+    void this.loadMonthTasks(monthCursor);
   },
 
   onJumpToday() {
     const key = todayKey();
     const monthCursor = monthKeyFromDateKey(key);
+    const listFilter = readListFilter();
     this.setData({
       selectedDate: key,
       monthCursor,
       calendarOpen: false,
-      tasks: tasksForDay(cachedTasks, key),
-      emptyLabel: emptyLabelFor(key),
-      ...calendarView(key, monthCursor)
+      tasks: tasksForDay(cachedTasks, key, listFilter),
+      emptyLabel: emptyLabelFor(key, listFilter),
+      ...calendarView(key, monthCursor, monthTasks)
     });
     void this.loadSelectedDay(key);
   }

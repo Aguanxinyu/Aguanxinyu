@@ -7,6 +7,7 @@ import {
   dayStartMs,
   formatDayTitle,
   formatDueLabel,
+  formatScheduleLabel,
   monthKeyFromDateKey,
   shiftDateKey,
   todayKey
@@ -50,5 +51,16 @@ describe('calendar helpers', () => {
   it('formats due labels without Intl', () => {
     expect(formatDueLabel(Date.parse('2026-08-21T01:05:00.000Z'), false)).toBe('8月21日');
     expect(formatDueLabel(Date.parse('2026-08-21T01:05:00.000Z'), true)).toBe('8月21日 09:05');
+  });
+
+  it('formats start and end schedule labels', () => {
+    expect(
+      formatScheduleLabel({
+        startAt: Date.parse('2026-08-20T16:00:00.000Z'),
+        startHasTime: true,
+        dueAt: Date.parse('2026-08-21T10:00:00.000Z'),
+        dueHasTime: false
+      })
+    ).toBe('8月21日 00:00 → 8月21日');
   });
 });
