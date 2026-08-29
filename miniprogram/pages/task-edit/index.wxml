@@ -37,6 +37,17 @@
       </picker>
     </view>
     <view class="field field--row">
+      <text class="label">所属清单</text>
+      <picker
+        value="{{listIndex}}"
+        range="{{listNames}}"
+        bindchange="onListChange"
+        aria-label="所属清单"
+      >
+        <view class="picker-value">{{listNames[listIndex]}} ›</view>
+      </picker>
+    </view>
+    <view class="field field--row">
       <text class="label">开始时间</text>
       <switch
         color="#2563EB"

@@ -66,33 +66,31 @@
   font-size: 24rpx;
 }
 
-.list-filter-chip {
+.masthead--list .brand {
+  color: var(--accent-deep);
+}
+
+.list-exit {
   display: inline-flex;
   align-items: center;
-  gap: 8rpx;
-  margin-top: 18rpx;
-  padding: 10rpx 12rpx 10rpx 18rpx;
-  border-radius: 999rpx;
-  background: var(--accent-soft);
-  color: var(--accent-deep);
-  font-size: 24rpx;
-}
-
-.list-filter-clear {
-  width: 44rpx;
-  height: 44rpx;
-  margin: 0;
+  margin-top: 16rpx;
   padding: 0;
   border: 0;
-  border-radius: 50%;
-  background: rgba(15, 118, 110, 0.12);
-  color: var(--accent-deep);
-  font-size: 28rpx;
-  line-height: 40rpx;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 24rpx;
+  line-height: 1.4;
 }
 
-.list-filter-clear::after {
+.list-exit::after {
   border: 0;
+}
+
+.sheet-list-hint {
+  margin: -6rpx 0 14rpx;
+  color: var(--ink-soft);
+  font-size: 22rpx;
+  text-align: center;
 }
 
 .task-list {

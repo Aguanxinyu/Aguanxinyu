@@ -2,13 +2,16 @@ import { getReminderTemplateId } from '../../config.js';
 import {
   ApiClientError,
   apiClient,
+  type ClientList,
   type CreateTaskInput,
   type UpdateTaskInput
 } from '../../services/api.js';
 import { todoController } from '../../stores/todo-controller.js';
+import { readListContext } from '../../utils/list-context.js';
 
 const PRIORITIES = ['HIGH', 'MEDIUM', 'LOW'] as const;
 const REPEATS = ['NONE', 'DAILY', 'WEEKLY', 'MONTHLY'] as const;
+const INBOX_LIST_ID = 'inbox';
 let navigationTimer: ReturnType<typeof setTimeout> | undefined;
 
 function today(): string {
@@ -32,6 +35,11 @@ function formatDateTime(timestamp: number): { readonly date: string; readonly ti
 
 function messageFor(error: unknown): string {
   return error instanceof ApiClientError ? error.message : '保存失败，请稍后重试';
+}
+
+function listIndexFor(lists: readonly ClientList[], listId: string): number {
+  const index = lists.findIndex(({ id }) => id === listId);
+  return index === -1 ? 0 : index;
 }
 
 async function requestReminderPermission(): Promise<boolean> {
@@ -60,6 +68,10 @@ Page({
     notes: '',
     priorityIndex: 1,
     priorities: ['高', '中', '低'],
+    lists: [] as readonly ClientList[],
+    listNames: [] as readonly string[],
+    listIndex: 0,
+    selectedListId: INBOX_LIST_ID,
     startDate: today(),
     startTime: '09:00',
     hasStartDate: false,
@@ -80,18 +92,24 @@ Page({
     saving: false
   },
 
-  onLoad(options: { id?: string; date?: string }) {
+  onLoad(options: { id?: string; date?: string; listId?: string }) {
     const presetDate =
       typeof options.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(options.date)
         ? options.date
         : today();
+    const presetListId =
+      typeof options.listId === 'string' && options.listId.length > 0
+        ? options.listId
+        : (readListContext()?.listId ?? INBOX_LIST_ID);
     if (options.id === undefined) {
       this.setData({
         startDate: presetDate,
         dueDate: presetDate,
-        hasDueDate: typeof options.date === 'string'
+        hasDueDate: typeof options.date === 'string',
+        selectedListId: presetListId
       });
     }
+    void this.loadLists(presetListId);
     const taskId = options.id;
     if (taskId !== undefined && taskId.length > 0) {
       this.setData({ id: taskId });
@@ -99,9 +117,28 @@ Page({
     }
   },
 
+  async loadLists(preferredListId: string) {
+    try {
+      const lists = await apiClient.listLists();
+      const listNames = lists.map(({ name }) => name);
+      const listIndex = listIndexFor(lists, preferredListId);
+      const selected = lists[listIndex];
+      this.setData({
+        lists,
+        listNames,
+        listIndex,
+        selectedListId: selected?.id ?? INBOX_LIST_ID
+      });
+    } catch (error) {
+      void wx.showToast({ title: messageFor(error), icon: 'none' });
+    }
+  },
+
   async loadTask(taskId: string) {
     try {
-      const task = await apiClient.getTask(taskId);
+      const [task, lists] = await Promise.all([apiClient.getTask(taskId), apiClient.listLists()]);
+      const listNames = lists.map(({ name }) => name);
+      const listIndex = listIndexFor(lists, task.listId);
       const priorityIndex = PRIORITIES.indexOf(task.priority);
       const dueParts =
         task.dueAt === undefined ? { date: today(), time: '18:00' } : formatDateTime(task.dueAt);
@@ -110,6 +147,10 @@ Page({
           ? { date: dueParts.date, time: '09:00' }
           : formatDateTime(task.startAt);
       this.setData({
+        lists,
+        listNames,
+        listIndex,
+        selectedListId: task.listId,
         pageTitle: '编辑待办',
         pageSubtitle: '修改后将同步到所有设备',
         version: task.version,
@@ -156,6 +197,18 @@ Page({
 
   onPriorityChange(event: WechatMiniprogram.PickerChange) {
     this.setData({ priorityIndex: Number(event.detail.value) });
+  },
+
+  onListChange(event: WechatMiniprogram.PickerChange) {
+    const listIndex = Number(event.detail.value);
+    const list = this.data.lists[listIndex];
+    if (list === undefined) {
+      return;
+    }
+    this.setData({
+      listIndex,
+      selectedListId: list.id
+    });
   },
 
   onRepeatChange(event: WechatMiniprogram.PickerChange) {
@@ -282,6 +335,7 @@ Page({
         const input: UpdateTaskInput = {
           title,
           priority: PRIORITIES[this.data.priorityIndex] ?? 'MEDIUM',
+          listId: this.data.selectedListId,
           startHasTime: this.data.hasStartTime,
           dueHasTime: this.data.hasDueTime,
           reminderEnabled: reminderAccepted,
@@ -298,6 +352,7 @@ Page({
         const baseInput: CreateTaskInput = {
           title,
           priority: PRIORITIES[this.data.priorityIndex] ?? 'MEDIUM',
+          listId: this.data.selectedListId,
           startHasTime: this.data.hasStartTime,
           dueHasTime: this.data.hasDueTime,
           tagIds: [],

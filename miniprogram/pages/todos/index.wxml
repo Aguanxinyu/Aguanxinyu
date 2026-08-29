@@ -1,12 +1,20 @@
 <view class="page todo-page" style="padding-top: {{navPaddingTop}}px;">
-  <view class="masthead">
+  <view class="masthead {{inListWorkspace ? 'masthead--list' : ''}}">
     <view class="masthead-copy">
-      <text class="brand">今日待办</text>
-      <view class="page-subtitle">{{daySubtitle}}</view>
+      <text class="brand">{{pageHeadline}}</text>
+      <view class="page-subtitle">{{pageContextLabel}} · {{daySubtitle}}</view>
       <view class="day-line">
         <text class="day-title">{{dayTitle}}</text>
         <text class="day-count">{{loadingDay ? '同步中' : tasks.length + ' 项安排'}}</text>
       </view>
+      <button
+        wx:if="{{inListWorkspace}}"
+        class="list-exit"
+        bindtap="onExitListWorkspace"
+        aria-label="退出 {{listFilterName}} 清单"
+      >
+        退出清单
+      </button>
     </view>
     <button class="add-button" bindtap="onOpenEditor" aria-label="创建详细待办">写</button>
   </view>
@@ -18,11 +26,6 @@
     aria-atomic="true"
   >
     {{pendingCount}} 项操作将在恢复网络后同步
-  </view>
-
-  <view wx:if="{{listFilterName.length > 0}}" class="list-filter-chip">
-    <text>清单：{{listFilterName}}</text>
-    <button class="list-filter-clear" bindtap="onClearListFilter" aria-label="清除清单筛选">×</button>
   </view>
 
   <view class="task-list">
@@ -69,7 +72,7 @@
 
   <view wx:if="{{tasks.length > 0}}" class="load-more">
     <text wx:if="{{loadingMore}}">加载中…</text>
-    <text wx:elif="{{hasMore && isSelectedToday}}">上拉加载更多</text>
+    <text wx:elif="{{hasMore && isSelectedToday && !inListWorkspace}}">上拉加载更多</text>
     <text wx:else>这一天就这些安排</text>
   </view>
 
@@ -77,7 +80,7 @@
     <view class="quick-create">
       <input
         value="{{quickTitle}}"
-        placeholder="记到这一天…"
+        placeholder="{{quickPlaceholder}}"
         maxlength="100"
         confirm-type="done"
         bindinput="onQuickInput"
@@ -124,6 +127,7 @@
         <text class="sheet-title">{{monthTitle}}</text>
         <button class="month-nav" size="mini" data-delta="1" bindtap="onShiftMonth" aria-label="下个月">›</button>
       </view>
+      <view wx:if="{{inListWorkspace}}" class="sheet-list-hint">仅显示「{{listFilterName}}」里的安排</view>
       <view class="weekday-row">
         <text wx:for="{{weekdayLabels}}" wx:key="*this">{{item}}</text>
       </view>

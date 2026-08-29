@@ -1,8 +1,7 @@
 import { ApiClientError, apiClient, type ClientList } from '../../services/api.js';
 import type { ClientTask } from '../../stores/todo-store.js';
+import { clearListContext, readListContext, writeListContext } from '../../utils/list-context.js';
 import { getCustomNavInset } from '../../utils/layout.js';
-
-const LIST_FILTER_KEY = 'today-todo:list-filter';
 
 interface ListRow extends ClientList {
   readonly openCount: number;
@@ -87,6 +86,7 @@ Page({
         lists: [...this.data.lists, { ...list, openCount: 0, totalCount: 0 }],
         newName: ''
       });
+      void wx.showToast({ title: '清单已创建', icon: 'success' });
     } catch (error) {
       void wx.showToast({ title: messageFor(error), icon: 'none' });
     }
@@ -98,7 +98,7 @@ Page({
     if (list === undefined) {
       return;
     }
-    wx.setStorageSync(LIST_FILTER_KEY, {
+    writeListContext({
       listId: list.id,
       listName: list.name
     });
@@ -120,13 +120,8 @@ Page({
             this.setData({
               lists: this.data.lists.filter(({ id }) => id !== listId)
             });
-            const filter = wx.getStorageSync<unknown>(LIST_FILTER_KEY);
-            if (
-              typeof filter === 'object' &&
-              filter !== null &&
-              (filter as Readonly<Record<string, unknown>>).listId === listId
-            ) {
-              wx.removeStorageSync(LIST_FILTER_KEY);
+            if (readListContext()?.listId === listId) {
+              clearListContext();
             }
           })
           .catch((error: unknown) => {

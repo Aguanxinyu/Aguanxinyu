@@ -17,6 +17,7 @@ import {
   todayKey,
   type DayCell
 } from '../../utils/calendar.js';
+import { clearListContext, readListContext, type ListContext } from '../../utils/list-context.js';
 import { getCustomNavInset } from '../../utils/layout.js';
 
 interface DisplayTask extends ClientTask {
@@ -32,24 +33,6 @@ const PRIORITY_LABELS: Readonly<Record<ClientTask['priority'], string>> = {
 };
 
 const WEEKDAY_LABELS = ['日', '一', '二', '三', '四', '五', '六'] as const;
-const LIST_FILTER_KEY = 'today-todo:list-filter';
-
-interface ListFilter {
-  readonly listId: string;
-  readonly listName: string;
-}
-
-function readListFilter(): ListFilter | null {
-  const raw = wx.getStorageSync<unknown>(LIST_FILTER_KEY);
-  if (typeof raw !== 'object' || raw === null) {
-    return null;
-  }
-  const candidate = raw as Readonly<Record<string, unknown>>;
-  if (typeof candidate.listId !== 'string' || typeof candidate.listName !== 'string') {
-    return null;
-  }
-  return { listId: candidate.listId, listName: candidate.listName };
-}
 
 function displayTask(task: ClientTask): DisplayTask {
   const dueLabel = formatScheduleLabel({
@@ -70,6 +53,16 @@ function messageFor(error: unknown): string {
   return error instanceof ApiClientError ? error.message : '操作失败，请稍后重试';
 }
 
+function filterTasksForList(
+  tasks: readonly ClientTask[],
+  listContext: ListContext | null
+): readonly ClientTask[] {
+  if (listContext === null) {
+    return tasks.filter(({ status }) => status !== 'TRASHED');
+  }
+  return tasks.filter((task) => task.status !== 'TRASHED' && task.listId === listContext.listId);
+}
+
 function monthGridRange(monthCursor: string): { readonly from: string; readonly to: string } {
   const grid = buildMonthGrid(monthCursor);
   const first = grid[0]?.key;
@@ -85,6 +78,7 @@ function calendarView(
   selectedDate: string,
   monthCursor: string,
   monthTasks: readonly ClientTask[],
+  listContext: ListContext | null,
   now = Date.now()
 ): {
   readonly weekDays: readonly DayCell[];
@@ -94,8 +88,9 @@ function calendarView(
   readonly daySubtitle: string;
   readonly isSelectedToday: boolean;
 } {
+  const scopedTasks = filterTasksForList(monthTasks, listContext);
   const range = monthGridRange(monthCursor);
-  const datesWithTasks = collectDatesWithTasks(monthTasks, range.from, range.to, now);
+  const datesWithTasks = collectDatesWithTasks(scopedTasks, range.from, range.to, now);
   return {
     weekDays: buildWeekStrip(selectedDate, now),
     monthDays: applyTaskMarkers(buildMonthGrid(monthCursor, now), datesWithTasks),
@@ -109,28 +104,41 @@ function calendarView(
 function tasksForDay(
   tasks: readonly ClientTask[],
   selectedDate: string,
-  listFilter: ListFilter | null,
+  listContext: ListContext | null,
   now = Date.now()
 ): readonly DisplayTask[] {
-  return tasks
-    .filter(({ status }) => status !== 'TRASHED')
-    .filter((task) => (listFilter === null ? true : task.listId === listFilter.listId))
+  return filterTasksForList(tasks, listContext)
     .filter((task) => taskBelongsToCalendarDay(task, selectedDate, now))
     .map(displayTask);
 }
 
 function emptyLabelFor(
   selectedDate: string,
-  listFilter: ListFilter | null,
+  listContext: ListContext | null,
   now = Date.now()
 ): string {
   const dayLabel = selectedDate === todayKey(now) ? '今天' : formatDayTitle(selectedDate, now);
-  if (listFilter !== null) {
-    return `${dayLabel}在「${listFilter.listName}」没有待办`;
+  if (listContext !== null) {
+    return `${dayLabel}在「${listContext.listName}」还没有安排`;
   }
   return selectedDate === todayKey(now)
     ? '今天还没有安排，先写下第一件事'
     : `${dayLabel}没有记录的安排`;
+}
+
+function quickPlaceholder(listContext: ListContext | null): string {
+  if (listContext === null) {
+    return '记到这一天…';
+  }
+  return `记到「${listContext.listName}」…`;
+}
+
+function pageHeadline(listContext: ListContext | null): string {
+  return listContext === null ? '今日待办' : listContext.listName;
+}
+
+function pageContextLabel(listContext: ListContext | null): string {
+  return listContext === null ? '全部待办 · 按日查看' : '场景清单 · 按日查看';
 }
 
 let unsubscribe: (() => void) | undefined;
@@ -152,7 +160,12 @@ Page({
     daySubtitle: '',
     isSelectedToday: true,
     emptyLabel: '今天还没有安排，先写下第一件事',
+    inListWorkspace: false,
+    listFilterId: '',
     listFilterName: '',
+    pageHeadline: '今日待办',
+    pageContextLabel: '全部待办 · 按日查看',
+    quickPlaceholder: '记到这一天…',
     tasks: [] as readonly DisplayTask[],
     quickTitle: '',
     loading: false,
@@ -164,29 +177,47 @@ Page({
     navPaddingTop: 88
   },
 
+  applyListContext(listContext: ListContext | null) {
+    return {
+      inListWorkspace: listContext !== null,
+      listFilterId: listContext?.listId ?? '',
+      listFilterName: listContext?.listName ?? '',
+      pageHeadline: pageHeadline(listContext),
+      pageContextLabel: pageContextLabel(listContext),
+      quickPlaceholder: quickPlaceholder(listContext)
+    };
+  },
+
+  refreshView(selectedDate: string, monthCursor: string, listContext: ListContext | null) {
+    return {
+      ...this.applyListContext(listContext),
+      tasks: tasksForDay(cachedTasks, selectedDate, listContext),
+      emptyLabel: emptyLabelFor(selectedDate, listContext),
+      ...calendarView(selectedDate, monthCursor, monthTasks, listContext)
+    };
+  },
+
   onLoad() {
     const selectedDate = todayKey();
     const monthCursor = monthKeyFromDateKey(selectedDate);
     const navPaddingTop = getCustomNavInset();
-    const listFilter = readListFilter();
+    const listContext = readListContext();
     this.setData({
       selectedDate,
       monthCursor,
       navPaddingTop,
-      listFilterName: listFilter?.listName ?? '',
-      ...calendarView(selectedDate, monthCursor, monthTasks),
-      emptyLabel: emptyLabelFor(selectedDate, listFilter)
+      ...this.refreshView(selectedDate, monthCursor, listContext)
     });
     unsubscribe = todoController.subscribe((state: TodoState) => {
       cachedTasks = state.tasks;
-      const filter = readListFilter();
+      const context = readListContext();
       this.setData({
-        tasks: tasksForDay(state.tasks, this.data.selectedDate, filter),
+        tasks: tasksForDay(state.tasks, this.data.selectedDate, context),
         pendingCount: state.pendingMutations.length,
         hasMore: state.hasMore,
-        emptyLabel: emptyLabelFor(this.data.selectedDate, filter),
+        emptyLabel: emptyLabelFor(this.data.selectedDate, context),
         ...(this.data.calendarOpen
-          ? calendarView(this.data.selectedDate, this.data.monthCursor, monthTasks)
+          ? calendarView(this.data.selectedDate, this.data.monthCursor, monthTasks, context)
           : {})
       });
     });
@@ -200,27 +231,20 @@ Page({
   onShow() {
     const selectedDate = this.data.selectedDate;
     const monthCursor = this.data.monthCursor;
-    const listFilter = readListFilter();
-    this.setData({
-      listFilterName: listFilter?.listName ?? '',
-      ...calendarView(selectedDate, monthCursor, monthTasks),
-      tasks: tasksForDay(cachedTasks, selectedDate, listFilter),
-      emptyLabel: emptyLabelFor(selectedDate, listFilter)
-    });
+    const listContext = readListContext();
+    this.setData(this.refreshView(selectedDate, monthCursor, listContext));
     void this.loadSelectedDay(selectedDate);
     if (this.data.calendarOpen) {
       void this.loadMonthTasks(monthCursor);
     }
   },
 
-  onClearListFilter() {
-    wx.removeStorageSync(LIST_FILTER_KEY);
+  onExitListWorkspace() {
+    clearListContext();
     const selectedDate = this.data.selectedDate;
-    this.setData({
-      listFilterName: '',
-      tasks: tasksForDay(cachedTasks, selectedDate, null),
-      emptyLabel: emptyLabelFor(selectedDate, null)
-    });
+    const monthCursor = this.data.monthCursor;
+    this.setData(this.refreshView(selectedDate, monthCursor, null));
+    void wx.switchTab({ url: '/pages/lists/index' });
   },
 
   async loadSelectedDay(selectedDate: string): Promise<void> {
@@ -235,10 +259,10 @@ Page({
       if (token !== dayLoadToken) {
         return;
       }
-      const listFilter = readListFilter();
+      const listContext = readListContext();
       this.setData({
-        tasks: tasksForDay(todoController.getState().tasks, selectedDate, listFilter),
-        emptyLabel: emptyLabelFor(selectedDate, listFilter)
+        tasks: tasksForDay(todoController.getState().tasks, selectedDate, listContext),
+        emptyLabel: emptyLabelFor(selectedDate, listContext)
       });
     } catch (error) {
       if (token === dayLoadToken) {
@@ -260,7 +284,8 @@ Page({
       if (token !== monthLoadToken) {
         return;
       }
-      this.setData(calendarView(this.data.selectedDate, monthCursor, monthTasks));
+      const listContext = readListContext();
+      this.setData(calendarView(this.data.selectedDate, monthCursor, monthTasks, listContext));
     } catch (error) {
       if (token === monthLoadToken) {
         void wx.showToast({ title: messageFor(error), icon: 'none' });
@@ -292,7 +317,7 @@ Page({
     if (title.length === 0 || this.data.loading) {
       return;
     }
-    const listFilter = readListFilter();
+    const listContext = readListContext();
     this.setData({ loading: true });
     try {
       await todoController.create({
@@ -302,10 +327,13 @@ Page({
         dueAt: dayStartMs(this.data.selectedDate) + 18 * 60 * 60 * 1000,
         dueHasTime: false,
         tagIds: [],
-        ...(listFilter === null ? {} : { listId: listFilter.listId })
+        ...(listContext === null ? {} : { listId: listContext.listId })
       });
       this.setData({ quickTitle: '' });
-      void wx.showToast({ title: '已添加到这一天', icon: 'success' });
+      void wx.showToast({
+        title: listContext === null ? '已添加到这一天' : `已加入「${listContext.listName}」`,
+        icon: 'success'
+      });
       if (this.data.calendarOpen) {
         void this.loadMonthTasks(this.data.monthCursor);
       }
@@ -369,18 +397,22 @@ Page({
 
   onOpenEditor() {
     const date = this.data.selectedDate;
+    const listContext = readListContext();
+    const listQuery =
+      listContext === null ? '' : `&listId=${encodeURIComponent(listContext.listId)}`;
     void wx.navigateTo({
-      url: `/pages/task-edit/index?date=${encodeURIComponent(date)}`
+      url: `/pages/task-edit/index?date=${encodeURIComponent(date)}${listQuery}`
     });
   },
 
   onToggleCalendar() {
     const opening = !this.data.calendarOpen;
     const monthCursor = monthKeyFromDateKey(this.data.selectedDate);
+    const listContext = readListContext();
     this.setData({
       calendarOpen: opening,
       monthCursor,
-      ...calendarView(this.data.selectedDate, monthCursor, monthTasks)
+      ...calendarView(this.data.selectedDate, monthCursor, monthTasks, listContext)
     });
     if (opening) {
       void this.loadMonthTasks(monthCursor);
@@ -400,14 +432,12 @@ Page({
       return;
     }
     const monthCursor = monthKeyFromDateKey(key);
-    const listFilter = readListFilter();
+    const listContext = readListContext();
     this.setData({
       selectedDate: key,
       monthCursor,
       calendarOpen: false,
-      tasks: tasksForDay(cachedTasks, key, listFilter),
-      emptyLabel: emptyLabelFor(key, listFilter),
-      ...calendarView(key, monthCursor, monthTasks)
+      ...this.refreshView(key, monthCursor, listContext)
     });
     void this.loadSelectedDay(key);
   },
@@ -416,9 +446,10 @@ Page({
     const delta = Number(event.currentTarget.dataset.delta ?? 0);
     const nextMonth = shiftDateKey(this.data.monthCursor, delta * 32);
     const monthCursor = monthKeyFromDateKey(nextMonth);
+    const listContext = readListContext();
     this.setData({
       monthCursor,
-      ...calendarView(this.data.selectedDate, monthCursor, monthTasks)
+      ...calendarView(this.data.selectedDate, monthCursor, monthTasks, listContext)
     });
     void this.loadMonthTasks(monthCursor);
   },
@@ -426,14 +457,12 @@ Page({
   onJumpToday() {
     const key = todayKey();
     const monthCursor = monthKeyFromDateKey(key);
-    const listFilter = readListFilter();
+    const listContext = readListContext();
     this.setData({
       selectedDate: key,
       monthCursor,
       calendarOpen: false,
-      tasks: tasksForDay(cachedTasks, key, listFilter),
-      emptyLabel: emptyLabelFor(key, listFilter),
-      ...calendarView(key, monthCursor, monthTasks)
+      ...this.refreshView(key, monthCursor, listContext)
     });
     void this.loadSelectedDay(key);
   }

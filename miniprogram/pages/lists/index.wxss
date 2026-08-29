@@ -75,6 +75,16 @@
   font-size: 22rpx;
 }
 
+.list-enter {
+  margin-right: 8rpx;
+  padding: 6rpx 14rpx;
+  border-radius: 999rpx;
+  background: var(--accent-soft);
+  color: var(--accent-deep);
+  font-size: 22rpx;
+  font-weight: 600;
+}
+
 .list-chevron {
   margin-right: 4rpx;
   color: rgba(16, 36, 58, 0.35);
