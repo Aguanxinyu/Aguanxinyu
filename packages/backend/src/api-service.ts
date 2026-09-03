@@ -11,6 +11,7 @@ import {
   createReminderForTask,
   defaultWeekStart,
   DomainError,
+  expandOccurrences,
   isValidWeekStart,
   occurrenceKey,
   reactivateReminder,
@@ -18,6 +19,7 @@ import {
   resolveIdentityMerge,
   restoreTask,
   sortTasks,
+  shanghaiDateKey,
   taskBelongsToDate,
   taskOverlapsDateRange,
   taskSortTuple,
@@ -59,6 +61,20 @@ const IDEMPOTENCY_LIFETIME_MS = 24 * 60 * 60 * 1000;
 const MAX_REMINDER_GRANTS = 20;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_WEEKLY_GENERATIONS = 5;
+const RECURRENCE_HORIZON_MS = 60 * 24 * 60 * 60 * 1000;
+
+function isValidDateKey(value: string): boolean {
+  if (!DATE_PATTERN.test(value)) {
+    return false;
+  }
+  const [year, month, day] = value.split('-').map(Number);
+  const parsed = new Date(Date.UTC(year ?? 0, (month ?? 0) - 1, day ?? 0));
+  return (
+    parsed.getUTCFullYear() === year &&
+    parsed.getUTCMonth() === (month ?? 0) - 1 &&
+    parsed.getUTCDate() === day
+  );
+}
 
 const locationSchema = z.discriminatedUnion('source', [
   z.object({
@@ -78,19 +94,19 @@ const locationSchema = z.discriminatedUnion('source', [
 const recurrenceSchema = z.discriminatedUnion('frequency', [
   z.object({
     frequency: z.literal('DAILY'),
-    startDate: z.string().regex(DATE_PATTERN),
-    endDate: z.string().regex(DATE_PATTERN).optional()
+    startDate: z.string().refine(isValidDateKey),
+    endDate: z.string().refine(isValidDateKey).optional()
   }),
   z.object({
     frequency: z.literal('WEEKLY'),
-    startDate: z.string().regex(DATE_PATTERN),
-    endDate: z.string().regex(DATE_PATTERN).optional(),
+    startDate: z.string().refine(isValidDateKey),
+    endDate: z.string().refine(isValidDateKey).optional(),
     weekdays: z.array(z.number().int().min(1).max(7)).min(1).max(7)
   }),
   z.object({
     frequency: z.literal('MONTHLY'),
-    startDate: z.string().regex(DATE_PATTERN),
-    endDate: z.string().regex(DATE_PATTERN).optional(),
+    startDate: z.string().refine(isValidDateKey),
+    endDate: z.string().refine(isValidDateKey).optional(),
     monthDay: z.number().int().min(1).max(31)
   })
 ]);
@@ -113,15 +129,15 @@ const createTaskSchema = z.object({
 const updateTaskSchema = z.object({
   version: z.number().int().positive(),
   title: z.string().max(100).optional(),
-  notes: z.string().max(1000).optional(),
+  notes: z.string().max(1000).nullable().optional(),
   priority: z.enum(['HIGH', 'MEDIUM', 'LOW']).optional(),
-  startAt: z.number().optional(),
+  startAt: z.number().nullable().optional(),
   startHasTime: z.boolean().optional(),
-  dueAt: z.number().optional(),
+  dueAt: z.number().nullable().optional(),
   dueHasTime: z.boolean().optional(),
   listId: z.string().optional(),
   tagIds: z.array(z.string()).max(5).optional(),
-  location: locationSchema.optional(),
+  location: locationSchema.nullable().optional(),
   reminderEnabled: z.boolean().optional()
 });
 
@@ -618,6 +634,8 @@ export class ApiService {
       startHasTime: input.startHasTime,
       dueHasTime: input.dueHasTime,
       ...(input.notes === undefined ? {} : { notes: input.notes }),
+      ...(input.startAt === undefined ? {} : { startAt: input.startAt }),
+      ...(input.dueAt === undefined ? {} : { dueAt: input.dueAt }),
       ...(input.location === undefined ? {} : { location: input.location })
     };
     const series: SeriesRecord = {
@@ -630,17 +648,45 @@ export class ApiService {
       createdAt: now,
       updatedAt: now
     };
+    const horizonDate = shanghaiDateKey(now + RECURRENCE_HORIZON_MS);
+    const throughDate =
+      recurrence.startDate > horizonDate ? recurrence.startDate : horizonDate;
+    const occurrenceDates = expandOccurrences(series, recurrence.startDate, throughDate);
+    const firstDate = occurrenceDates[0];
+    if (firstDate === undefined) {
+      throw new DomainError('RECURRENCE_INVALID_RANGE');
+    }
+
+    const tasks = occurrenceDates.map((date) => this.taskFromSeries(series, date, now));
+    let firstTask = tasks[0] as Task;
+    let reminder: ReminderRecord | undefined;
+    if (input.reminderEnabled === true) {
+      reminder = {
+        ...createReminderForTask(firstTask, now, await this.database.nextId('reminder')),
+        title: firstTask.title
+      };
+      firstTask = { ...firstTask, remindAt: reminder.fireAt };
+      tasks[0] = firstTask;
+    }
+
     await this.database.saveSeries(series);
-    const task = this.taskFromSeries(series, recurrence.startDate, now);
-    await this.database.saveTask(task);
+    for (const task of tasks) {
+      await this.database.saveTask(task);
+    }
+    if (reminder !== undefined) {
+      await this.database.saveReminder(reminder);
+    }
     await this.database.saveSeries({
       ...series,
-      materializedThrough: recurrence.startDate
+      materializedThrough: throughDate
     });
-    return success(201, task);
+    return success(201, firstTask);
   }
 
   public taskFromSeries(series: SeriesRecord, occurrenceDate: string, now: number): Task {
+    const startMs = Date.parse(`${series.startDate}T00:00:00+08:00`);
+    const occurrenceMs = Date.parse(`${occurrenceDate}T00:00:00+08:00`);
+    const scheduleOffset = occurrenceMs - startMs;
     return {
       id: occurrenceKey(series.id, occurrenceDate),
       userId: series.userId,
@@ -657,6 +703,12 @@ export class ApiService {
       createdAt: now,
       updatedAt: now,
       ...(series.template.notes === undefined ? {} : { notes: series.template.notes }),
+      ...(series.template.startAt === undefined
+        ? {}
+        : { startAt: series.template.startAt + scheduleOffset }),
+      ...(series.template.dueAt === undefined
+        ? {}
+        : { dueAt: series.template.dueAt + scheduleOffset }),
       ...(series.template.location === undefined ? {} : { location: series.template.location })
     };
   }
@@ -739,21 +791,35 @@ export class ApiService {
     }
 
     const now = this.now();
-    const updated: Task = {
+    const updated = {
       ...existing,
       ...(input.title === undefined ? {} : { title: input.title }),
-      ...(input.notes === undefined ? {} : { notes: input.notes }),
+      ...(input.notes === undefined || input.notes === null ? {} : { notes: input.notes }),
       ...(input.priority === undefined ? {} : { priority: input.priority }),
-      ...(input.startAt === undefined ? {} : { startAt: input.startAt }),
+      ...(input.startAt === undefined || input.startAt === null ? {} : { startAt: input.startAt }),
       ...(input.startHasTime === undefined ? {} : { startHasTime: input.startHasTime }),
-      ...(input.dueAt === undefined ? {} : { dueAt: input.dueAt }),
+      ...(input.dueAt === undefined || input.dueAt === null ? {} : { dueAt: input.dueAt }),
       ...(input.dueHasTime === undefined ? {} : { dueHasTime: input.dueHasTime }),
-      ...(input.location === undefined ? {} : { location: input.location }),
+      ...(input.location === undefined || input.location === null
+        ? {}
+        : { location: input.location }),
       listId,
       tagIds,
       version: existing.version + 1,
       updatedAt: now
-    };
+    } satisfies Task;
+    if (input.notes === null) {
+      delete updated.notes;
+    }
+    if (input.startAt === null) {
+      delete updated.startAt;
+    }
+    if (input.dueAt === null) {
+      delete updated.dueAt;
+    }
+    if (input.location === null) {
+      delete updated.location;
+    }
     const validation = validateTaskInput(updated);
     if (!validation.valid) {
       return failure(400, validation.issues[0]?.code ?? 'TASK_INVALID', '待办信息不完整');
@@ -841,18 +907,18 @@ export class ApiService {
   ): Promise<HttpResult<readonly Task[]>> {
     const dueOnRaw = query?.dueOn;
     const dueOn = typeof dueOnRaw === 'string' && dueOnRaw.length > 0 ? dueOnRaw : undefined;
-    if (dueOn !== undefined && !DATE_PATTERN.test(dueOn)) {
+    if (dueOn !== undefined && !isValidDateKey(dueOn)) {
       return failure(400, 'INVALID_DUE_ON', 'dueOn 必须是 YYYY-MM-DD');
     }
     const dueFromRaw = query?.dueFrom;
     const dueFrom =
       typeof dueFromRaw === 'string' && dueFromRaw.length > 0 ? dueFromRaw : undefined;
-    if (dueFrom !== undefined && !DATE_PATTERN.test(dueFrom)) {
+    if (dueFrom !== undefined && !isValidDateKey(dueFrom)) {
       return failure(400, 'INVALID_DUE_FROM', 'dueFrom 必须是 YYYY-MM-DD');
     }
     const dueToRaw = query?.dueTo;
     const dueTo = typeof dueToRaw === 'string' && dueToRaw.length > 0 ? dueToRaw : undefined;
-    if (dueTo !== undefined && !DATE_PATTERN.test(dueTo)) {
+    if (dueTo !== undefined && !isValidDateKey(dueTo)) {
       return failure(400, 'INVALID_DUE_TO', 'dueTo 必须是 YYYY-MM-DD');
     }
     if (dueFrom !== undefined && dueTo !== undefined && dueFrom > dueTo) {
@@ -878,9 +944,9 @@ export class ApiService {
     const startIndex =
       cursor === undefined
         ? 0
-        : tasks.findIndex((task) => compareSortTuples(taskSortTuple(task), cursor) === 0);
+        : tasks.findIndex((task) => compareSortTuples(taskSortTuple(task), cursor) > 0);
     const candidates =
-      cursor === undefined ? tasks : startIndex === -1 ? [] : tasks.slice(startIndex + 1);
+      cursor === undefined ? tasks : startIndex === -1 ? [] : tasks.slice(startIndex);
     const page = candidates.slice(0, limit);
     const hasMore = candidates.length > page.length;
     const lastTask = page[page.length - 1];

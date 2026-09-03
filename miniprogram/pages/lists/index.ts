@@ -62,8 +62,8 @@ Page({
   async loadLists() {
     this.setData({ loading: true });
     try {
-      const [lists, taskPage] = await Promise.all([apiClient.listLists(), apiClient.listTasks()]);
-      this.setData({ lists: buildListRows(lists, taskPage.tasks) });
+      const [lists, tasks] = await Promise.all([apiClient.listLists(), apiClient.listAllTasks()]);
+      this.setData({ lists: buildListRows(lists, tasks) });
     } catch (error) {
       void wx.showToast({ title: messageFor(error), icon: 'none' });
     } finally {

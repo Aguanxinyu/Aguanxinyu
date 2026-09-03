@@ -84,6 +84,8 @@ export interface TaskTemplate {
   readonly location?: Task['location'];
   readonly startHasTime: boolean;
   readonly dueHasTime: boolean;
+  readonly startAt?: number;
+  readonly dueAt?: number;
 }
 
 export interface SeriesRecord {
@@ -100,6 +102,7 @@ export interface SeriesRecord {
 
 export interface ReminderRecord extends Reminder {
   readonly title: string;
+  readonly claimedAt?: number;
 }
 
 export interface ReminderGrant {

@@ -124,7 +124,16 @@ export interface CreateTaskInput {
       };
 }
 
-export type UpdateTaskInput = Partial<Omit<CreateTaskInput, 'recurrence' | 'reminderEnabled'>> & {
+export type UpdateTaskInput = Partial<
+  Omit<
+    CreateTaskInput,
+    'recurrence' | 'reminderEnabled' | 'notes' | 'startAt' | 'dueAt' | 'location'
+  >
+> & {
+  readonly notes?: string | null;
+  readonly startAt?: number | null;
+  readonly dueAt?: number | null;
+  readonly location?: CreateTaskInput['location'] | null;
   readonly reminderEnabled?: boolean;
 };
 
@@ -232,6 +241,22 @@ export class ApiClient {
       cursor: envelope.meta.cursor ?? null,
       hasMore: envelope.meta.hasMore === true
     };
+  }
+
+  public async listAllTasks(
+    options: Omit<ListTasksOptions, 'cursor'> = {}
+  ): Promise<readonly ClientTask[]> {
+    const tasks: ClientTask[] = [];
+    let cursor: string | undefined;
+    do {
+      const page = await this.listTasks({
+        ...options,
+        ...(cursor === undefined ? {} : { cursor })
+      });
+      tasks.push(...page.tasks);
+      cursor = page.hasMore && page.cursor !== null ? page.cursor : undefined;
+    } while (cursor !== undefined);
+    return tasks;
   }
 
   public getTask(taskId: string): Promise<ClientTask> {

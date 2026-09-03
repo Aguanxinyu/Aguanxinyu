@@ -300,10 +300,28 @@ export class MemoryDatabase implements BackendDatabase {
     this.snapshot = {
       ...this.snapshot,
       reminders: this.snapshot.reminders.map((reminder) =>
-        dueIds.has(reminder.id) ? { ...reminder, state: 'SENDING' as const } : reminder
+        dueIds.has(reminder.id)
+          ? { ...reminder, state: 'SENDING' as const, claimedAt: now }
+          : reminder
       )
     };
-    return Promise.resolve(due.map((reminder) => ({ ...reminder, state: 'SENDING' as const })));
+    return Promise.resolve(
+      due.map((reminder) => ({ ...reminder, state: 'SENDING' as const, claimedAt: now }))
+    );
+  }
+
+  public markStaleReminderClaimsUnknown(before: number): Promise<void> {
+    this.snapshot = {
+      ...this.snapshot,
+      reminders: this.snapshot.reminders.map((reminder) =>
+        reminder.state === 'SENDING' &&
+        reminder.claimedAt !== undefined &&
+        reminder.claimedAt <= before
+          ? { ...reminder, state: 'UNKNOWN' as const }
+          : reminder
+      )
+    };
+    return Promise.resolve();
   }
 
   public findRemindersForTask(userId: string, taskId: string): Promise<readonly ReminderRecord[]> {

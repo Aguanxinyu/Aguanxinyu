@@ -103,6 +103,7 @@ interface ReminderRow {
   fire_at: number;
   state: ReminderRecord['state'];
   title: string;
+  claimed_at: number | null;
 }
 
 interface IdempotencyRow {
@@ -208,7 +209,8 @@ function toReminderRecord(row: ReminderRow): ReminderRecord {
     taskVersion: row.task_version,
     fireAt: row.fire_at,
     state: row.state,
-    title: row.title
+    title: row.title,
+    ...(row.claimed_at === null ? {} : { claimedAt: row.claimed_at })
   };
 }
 
@@ -595,7 +597,7 @@ export class PostgresDatabase implements BackendDatabase {
          FOR UPDATE SKIP LOCKED
        )
        UPDATE reminders AS reminder
-       SET state = 'SENDING'
+       SET state = 'SENDING', claimed_at = $1
        FROM candidates
        WHERE reminder.id = candidates.id
        RETURNING reminder.*`,
@@ -604,6 +606,15 @@ export class PostgresDatabase implements BackendDatabase {
     return result.rows.map(toReminderRecord).sort((left, right) => {
       return left.fireAt - right.fireAt || left.id.localeCompare(right.id);
     });
+  }
+
+  public async markStaleReminderClaimsUnknown(before: number): Promise<void> {
+    await this.pool.query(
+      `UPDATE reminders
+       SET state = 'UNKNOWN'
+       WHERE state = 'SENDING' AND claimed_at <= $1`,
+      [before]
+    );
   }
 
   public async findRemindersForTask(
@@ -619,15 +630,16 @@ export class PostgresDatabase implements BackendDatabase {
 
   public async saveReminder(reminder: ReminderRecord): Promise<void> {
     await this.pool.query(
-      `INSERT INTO reminders (id, user_id, task_id, task_version, fire_at, state, title)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO reminders (id, user_id, task_id, task_version, fire_at, state, title, claimed_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        ON CONFLICT (id) DO UPDATE SET
          user_id = EXCLUDED.user_id,
          task_id = EXCLUDED.task_id,
          task_version = EXCLUDED.task_version,
          fire_at = EXCLUDED.fire_at,
          state = EXCLUDED.state,
-         title = EXCLUDED.title`,
+         title = EXCLUDED.title,
+         claimed_at = EXCLUDED.claimed_at`,
       [
         reminder.id,
         reminder.userId,
@@ -635,7 +647,8 @@ export class PostgresDatabase implements BackendDatabase {
         reminder.taskVersion,
         reminder.fireAt,
         reminder.state,
-        reminder.title
+        reminder.title,
+        reminder.claimedAt ?? null
       ]
     );
   }

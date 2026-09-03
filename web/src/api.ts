@@ -118,7 +118,7 @@ export class ApiClientError extends Error {
   }
 }
 
-async function request<T>(
+async function requestEnvelope<T>(
   method: string,
   path: string,
   options: {
@@ -127,7 +127,7 @@ async function request<T>(
     readonly write?: boolean;
     readonly methodOverride?: 'PATCH';
   } = {}
-): Promise<T> {
+): Promise<ApiSuccessBody<T>> {
   const url = new URL(`${apiBase()}${path}`, window.location.origin);
   if (options.query !== undefined) {
     for (const [key, value] of Object.entries(options.query)) {
@@ -159,7 +159,20 @@ async function request<T>(
     }
     throw new ApiClientError(response.status, payload.error.code, payload.error.message);
   }
-  return payload.data;
+  return payload;
+}
+
+function request<T>(
+  method: string,
+  path: string,
+  options: {
+    readonly body?: unknown;
+    readonly query?: Record<string, string>;
+    readonly write?: boolean;
+    readonly methodOverride?: 'PATCH';
+  } = {}
+): Promise<T> {
+  return requestEnvelope<T>(method, path, options).then(({ data }) => data);
 }
 
 export function loginWithCode(
@@ -175,10 +188,23 @@ export function logout(): Promise<null> {
   return request<null>('POST', '/v1/auth/logout', { write: true });
 }
 
-export function listTasks(dueOn?: string): Promise<readonly Task[]> {
-  return request<readonly Task[]>('GET', '/v1/tasks', {
-    ...(dueOn === undefined ? {} : { query: { dueOn } })
-  });
+export async function listTasks(dueOn?: string): Promise<readonly Task[]> {
+  const tasks: Task[] = [];
+  let cursor: string | undefined;
+  do {
+    const query = {
+      ...(dueOn === undefined ? {} : { dueOn }),
+      ...(cursor === undefined ? {} : { cursor })
+    };
+    const page = await requestEnvelope<readonly Task[]>('GET', '/v1/tasks', {
+      ...(Object.keys(query).length === 0 ? {} : { query })
+    });
+    tasks.push(...page.data);
+    const nextCursor = page.meta?.cursor;
+    cursor =
+      page.meta?.hasMore === true && typeof nextCursor === 'string' ? nextCursor : undefined;
+  } while (cursor !== undefined);
+  return tasks;
 }
 
 export function createTask(input: {
@@ -224,10 +250,11 @@ export function updateTask(
   body: {
     readonly version: number;
     readonly title?: string;
-    readonly notes?: string;
+    readonly notes?: string | null;
     readonly priority?: Task['priority'];
-    readonly dueAt?: number;
+    readonly dueAt?: number | null;
     readonly dueHasTime?: boolean;
+    readonly location?: { readonly source: 'MANUAL'; readonly name: string } | null;
   }
 ): Promise<Task> {
   return request<Task>('POST', `/v1/tasks/${taskId}`, {

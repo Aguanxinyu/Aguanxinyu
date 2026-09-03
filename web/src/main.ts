@@ -391,10 +391,12 @@ function openTaskEditor(task?: Task): void {
         await updateTask(task.id, {
           version: task.version,
           title,
-          ...(notes.length > 0 ? { notes } : { notes: '' }),
+          notes: notes.length > 0 ? notes : null,
           priority,
           dueAt,
-          dueHasTime: false
+          dueHasTime: false,
+          location:
+            locationName.length > 0 ? { source: 'MANUAL', name: locationName } : null
         });
       }
       root.innerHTML = '';

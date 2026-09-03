@@ -67,6 +67,7 @@ export interface BackendDatabase {
   saveSeries(series: SeriesRecord): Promise<void>;
 
   claimRemindersDueAtOrBefore(now: number): Promise<readonly ReminderRecord[]>;
+  markStaleReminderClaimsUnknown(before: number): Promise<void>;
   findRemindersForTask(userId: string, taskId: string): Promise<readonly ReminderRecord[]>;
   saveReminder(reminder: ReminderRecord): Promise<void>;
   reminderGrantFor(userId: string): Promise<number>;

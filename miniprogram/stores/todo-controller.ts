@@ -142,11 +142,12 @@ export class TodoController {
     if (apiClient.getStoredToken() === null) {
       await apiClient.login();
     }
-    const page = await apiClient.listTasks({ dueOn });
+    await this.flushPendingMutations();
+    const tasksForDay = await apiClient.listAllTasks({ dueOn });
     const now = Date.now();
     const kept = this.state.tasks.filter((task) => !taskBelongsToCalendarDay(task, dueOn, now));
     const byId = new Map(kept.map((task) => [task.id, task] as const));
-    for (const task of page.tasks) {
+    for (const task of tasksForDay) {
       byId.set(task.id, task);
     }
     this.publish({
@@ -170,11 +171,11 @@ export class TodoController {
     if (apiClient.getStoredToken() === null) {
       await apiClient.login();
     }
-    const page = await apiClient.listTasks({ dueFrom, dueTo });
+    const tasksForRange = await apiClient.listAllTasks({ dueFrom, dueTo });
     const now = Date.now();
     const kept = this.state.tasks.filter((task) => !taskOverlapsRange(task, dueFrom, dueTo, now));
     const byId = new Map(kept.map((task) => [task.id, task] as const));
-    for (const task of page.tasks) {
+    for (const task of tasksForRange) {
       byId.set(task.id, task);
     }
     const tasks = [...byId.values()];
@@ -183,7 +184,7 @@ export class TodoController {
       tasks,
       syncedAt: now
     });
-    return page.tasks;
+    return tasksForRange;
   }
 
   public async loadMore(): Promise<void> {

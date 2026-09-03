@@ -339,11 +339,11 @@ Page({
           startHasTime: this.data.hasStartTime,
           dueHasTime: this.data.hasDueTime,
           reminderEnabled: reminderAccepted,
-          ...(this.data.notes.trim().length === 0 ? {} : { notes: this.data.notes.trim() }),
-          ...(startAt === undefined ? {} : { startAt }),
-          ...(dueAt === undefined ? {} : { dueAt }),
+          notes: this.data.notes.trim().length === 0 ? null : this.data.notes.trim(),
+          startAt: startAt ?? null,
+          dueAt: dueAt ?? null,
           ...(this.data.locationName.trim().length === 0
-            ? {}
+            ? { location: null }
             : { location: { source: 'MANUAL' as const, name: this.data.locationName.trim() } })
         };
         await todoController.update(this.data.id, input, this.data.version);

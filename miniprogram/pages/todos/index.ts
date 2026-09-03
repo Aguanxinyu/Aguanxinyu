@@ -251,11 +251,7 @@ Page({
     const token = ++dayLoadToken;
     this.setData({ loadingDay: true });
     try {
-      if (selectedDate === todayKey()) {
-        await todoController.refresh();
-      } else {
-        await todoController.refreshDay(selectedDate);
-      }
+      await todoController.refreshDay(selectedDate);
       if (token !== dayLoadToken) {
         return;
       }
