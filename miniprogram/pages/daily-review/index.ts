@@ -109,7 +109,10 @@ Page({
 
   onOpenTask(event: WechatMiniprogram.BaseEvent): void {
     const raw: unknown = event.currentTarget.dataset['ids'];
-    const first = Array.isArray(raw) ? raw[0] : raw;
+    let first: unknown = raw;
+    if (Array.isArray(raw)) {
+      first = raw[0] as unknown;
+    }
     const taskId = typeof first === 'string' || typeof first === 'number' ? String(first) : '';
     if (taskId.length > 0) {
       void wx.navigateTo({
