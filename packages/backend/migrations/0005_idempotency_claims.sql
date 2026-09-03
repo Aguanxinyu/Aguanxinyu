@@ -1,0 +1,2 @@
+ALTER TABLE idempotency
+  ALTER COLUMN result DROP NOT NULL;

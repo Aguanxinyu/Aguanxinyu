@@ -130,6 +130,52 @@ describe('authenticated todo API flow', () => {
     expect(disabled.body.success && disabled.body.data.remindAt).toBeUndefined();
   });
 
+  it('clears optional task fields explicitly with null', async () => {
+    const now = Date.UTC(2026, 6, 31, 4);
+    const system = createTestSystem({ now });
+    const user = await system.login('clear-fields-user');
+    const created = await system.request({
+      method: 'POST',
+      path: '/v1/tasks',
+      token: user.token,
+      requestId: 'create-fields',
+      body: {
+        title: '清空字段',
+        notes: '旧备注',
+        priority: 'MEDIUM',
+        startAt: now + 30 * 60 * 1000,
+        startHasTime: true,
+        dueAt: now + 60 * 60 * 1000,
+        dueHasTime: true,
+        location: { source: 'MANUAL', name: '旧地点' },
+        tagIds: []
+      }
+    });
+    const task = created.body.success ? created.body.data : undefined;
+
+    const cleared = await system.request({
+      method: 'PATCH',
+      path: `/v1/tasks/${task?.id ?? ''}`,
+      token: user.token,
+      requestId: 'clear-fields',
+      body: {
+        version: task?.version ?? 0,
+        notes: null,
+        startAt: null,
+        startHasTime: false,
+        dueAt: null,
+        dueHasTime: false,
+        location: null
+      }
+    });
+
+    expect(cleared.status).toBe(200);
+    expect(cleared.body.success && cleared.body.data).not.toHaveProperty('notes');
+    expect(cleared.body.success && cleared.body.data).not.toHaveProperty('startAt');
+    expect(cleared.body.success && cleared.body.data).not.toHaveProperty('dueAt');
+    expect(cleared.body.success && cleared.body.data).not.toHaveProperty('location');
+  });
+
   it('rejects a PATCH that carries a stale version', async () => {
     const system = createTestSystem({ now: Date.UTC(2026, 6, 31, 4) });
     const user = await system.login('stale-version-user');
@@ -174,6 +220,41 @@ describe('authenticated todo API flow', () => {
       token: user.token
     });
     expect(current.body.success && current.body.data.title).toBe('第一次修改');
+  });
+
+  it('allows only one concurrent PATCH for the same task version', async () => {
+    const system = createTestSystem({ now: Date.UTC(2026, 6, 31, 4) });
+    const user = await system.login('concurrent-version-user');
+    const created = await system.request({
+      method: 'POST',
+      path: '/v1/tasks',
+      token: user.token,
+      requestId: 'create-concurrent',
+      body: {
+        title: '并发目标',
+        priority: 'MEDIUM',
+        dueHasTime: false,
+        tagIds: []
+      }
+    });
+    const taskId = created.body.success ? created.body.data.id : '';
+    const version = created.body.success ? created.body.data.version : 0;
+    const update = (title: string, requestId: string) =>
+      system.request({
+        method: 'PATCH' as const,
+        path: `/v1/tasks/${taskId}`,
+        token: user.token,
+        requestId,
+        body: { version, title }
+      });
+
+    const responses = await Promise.all([
+      update('并发修改 A', 'concurrent-a'),
+      update('并发修改 B', 'concurrent-b')
+    ]);
+
+    expect(responses.map(({ status }) => status).sort()).toEqual([200, 409]);
+    expect((await system.database.findTask(user.userId, taskId))?.version).toBe(version + 1);
   });
 
   it('accepts a POST with an X-HTTP-Method-Override header as an update', async () => {
@@ -270,6 +351,47 @@ describe('authenticated todo API flow', () => {
     expect(new Set(ids).size).toBe(5);
   });
 
+  it('continues pagination when the cursor task was deleted', async () => {
+    const system = createTestSystem({ now: Date.UTC(2026, 6, 31, 4) });
+    const user = await system.login('deleted-cursor-user');
+    for (let index = 0; index < 4; index += 1) {
+      await system.request({
+        method: 'POST',
+        path: '/v1/tasks',
+        token: user.token,
+        requestId: `cursor-create-${String(index)}`,
+        body: {
+          title: `游标任务 ${String(index)}`,
+          priority: 'MEDIUM',
+          dueHasTime: false,
+          tagIds: []
+        }
+      });
+    }
+    const first = await system.request({
+      method: 'GET',
+      path: '/v1/tasks',
+      token: user.token,
+      query: { limit: '2' }
+    });
+    const cursorTaskId = first.body.success ? first.body.data[1]?.id : undefined;
+    await system.request({
+      method: 'DELETE',
+      path: `/v1/tasks/${cursorTaskId ?? ''}`,
+      token: user.token,
+      requestId: 'delete-cursor'
+    });
+
+    const next = await system.request({
+      method: 'GET',
+      path: '/v1/tasks',
+      token: user.token,
+      query: { limit: '2', cursor: first.body.meta.cursor ?? '' }
+    });
+
+    expect(next.body.success && next.body.data).toHaveLength(2);
+  });
+
   it('filters tasks by Shanghai dueOn day including completed items', async () => {
     const system = createTestSystem({ now: Date.UTC(2026, 6, 31, 4) });
     const user = await system.login('due-on-user');
@@ -332,6 +454,13 @@ describe('authenticated todo API flow', () => {
       query: { dueOn: '2026/07/30' }
     });
     expect(invalid.status).toBe(400);
+    const impossibleDate = await system.request({
+      method: 'GET',
+      path: '/v1/tasks',
+      token: user.token,
+      query: { dueOn: '2026-99-99' }
+    });
+    expect(impossibleDate.status).toBe(400);
   });
 
   it('prevents one user from reading another user todo', async () => {

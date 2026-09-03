@@ -4,6 +4,8 @@ import type { ApiService } from './api-service.js';
 import type { BackendDatabase } from './database.js';
 import type { SentMessage } from './types.js';
 
+const STALE_REMINDER_CLAIM_MS = 5 * 60 * 1000;
+
 export interface SchedulerOptions {
   readonly database: BackendDatabase;
   readonly api: ApiService;
@@ -31,10 +33,18 @@ export class Schedulers {
     const now = this.now();
     for (const series of await this.database.seriesForUser()) {
       try {
-        if (series.status !== 'ACTIVE' || series.startDate > throughDate) {
+        if (
+          series.status !== 'ACTIVE' ||
+          series.startDate > throughDate ||
+          (series.materializedThrough !== undefined && series.materializedThrough >= throughDate)
+        ) {
           continue;
         }
-        const dates = expandOccurrences(series, series.startDate, throughDate);
+        const dates = expandOccurrences(
+          series,
+          series.materializedThrough ?? series.startDate,
+          throughDate
+        );
         for (const date of dates) {
           const task = this.api.taskFromSeries(series, date, now);
           if ((await this.database.findTask(series.userId, task.id)) === undefined) {
@@ -53,6 +63,7 @@ export class Schedulers {
 
     await this.database.purgeExpiredSessions(now);
     await this.database.purgeExpiredIdempotencyResults(now);
+    await this.database.markStaleReminderClaimsUnknown(now - STALE_REMINDER_CLAIM_MS);
     for (const user of await this.database.usersPendingPurge(now)) {
       await this.database.purgeUser(user.id);
     }
@@ -64,7 +75,7 @@ export class Schedulers {
   }
 
   public async dispatchReminders(at: number): Promise<void> {
-    for (const reminder of await this.database.remindersDueAtOrBefore(at)) {
+    for (const reminder of await this.database.claimRemindersDueAtOrBefore(at)) {
       const task = await this.database.findTask(reminder.userId, reminder.taskId);
       if (
         task === undefined ||
@@ -79,10 +90,6 @@ export class Schedulers {
         continue;
       }
 
-      await this.database.saveReminder({
-        ...reminder,
-        state: 'SENDING'
-      });
       try {
         await this.sendMessage({
           userId: reminder.userId,

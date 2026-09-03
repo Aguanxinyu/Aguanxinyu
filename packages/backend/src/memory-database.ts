@@ -1,6 +1,7 @@
 import type { Task } from '@today-todo/contracts';
 
-import type { BackendDatabase } from './database.js';
+import type { BackendDatabase, IdempotencyClaim } from './database.js';
+import type { DailyReviewRecord } from './daily-review-types.js';
 import { INBOX_LIST_ID } from './types.js';
 import type {
   ApiData,
@@ -16,7 +17,7 @@ import type { WeeklyReviewRecord } from './weekly-review-types.js';
 
 interface IdempotencyRecord {
   readonly key: string;
-  readonly result: HttpResult<ApiData>;
+  readonly result?: HttpResult<ApiData>;
   readonly expiresAt: number;
 }
 
@@ -31,6 +32,7 @@ interface Snapshot {
   readonly reminderGrants: Readonly<Record<string, number>>;
   readonly idempotency: readonly IdempotencyRecord[];
   readonly weeklyReviews: readonly WeeklyReviewRecord[];
+  readonly dailyReviews: readonly DailyReviewRecord[];
 }
 
 const EMPTY_SNAPSHOT: Snapshot = {
@@ -43,7 +45,8 @@ const EMPTY_SNAPSHOT: Snapshot = {
   reminders: [],
   reminderGrants: {},
   idempotency: [],
-  weeklyReviews: []
+  weeklyReviews: [],
+  dailyReviews: []
 };
 
 function upsertById<T extends { readonly id: string }>(
@@ -182,12 +185,20 @@ export class MemoryDatabase implements BackendDatabase {
     );
   }
 
-  public saveTask(task: Task): Promise<void> {
+  public saveTask(task: Task, expectedVersion?: number): Promise<boolean> {
+    if (expectedVersion !== undefined) {
+      const existing = this.snapshot.tasks.find(
+        (candidate) => candidate.userId === task.userId && candidate.id === task.id
+      );
+      if (existing?.version !== expectedVersion) {
+        return Promise.resolve(false);
+      }
+    }
     this.snapshot = {
       ...this.snapshot,
       tasks: upsertByUserAndId(this.snapshot.tasks, task)
     };
-    return Promise.resolve();
+    return Promise.resolve(true);
   }
 
   public deleteTask(userId: string, taskId: string): Promise<void> {
@@ -284,12 +295,36 @@ export class MemoryDatabase implements BackendDatabase {
     return Promise.resolve();
   }
 
-  public remindersDueAtOrBefore(now: number): Promise<readonly ReminderRecord[]> {
-    return Promise.resolve(
-      this.snapshot.reminders.filter(
-        (reminder) => reminder.state === 'SCHEDULED' && reminder.fireAt <= now
-      )
+  public claimRemindersDueAtOrBefore(now: number): Promise<readonly ReminderRecord[]> {
+    const due = this.snapshot.reminders.filter(
+      (reminder) => reminder.state === 'SCHEDULED' && reminder.fireAt <= now
     );
+    const dueIds = new Set(due.map(({ id }) => id));
+    this.snapshot = {
+      ...this.snapshot,
+      reminders: this.snapshot.reminders.map((reminder) =>
+        dueIds.has(reminder.id)
+          ? { ...reminder, state: 'SENDING' as const, claimedAt: now }
+          : reminder
+      )
+    };
+    return Promise.resolve(
+      due.map((reminder) => ({ ...reminder, state: 'SENDING' as const, claimedAt: now }))
+    );
+  }
+
+  public markStaleReminderClaimsUnknown(before: number): Promise<void> {
+    this.snapshot = {
+      ...this.snapshot,
+      reminders: this.snapshot.reminders.map((reminder) =>
+        reminder.state === 'SENDING' &&
+        reminder.claimedAt !== undefined &&
+        reminder.claimedAt <= before
+          ? { ...reminder, state: 'UNKNOWN' as const }
+          : reminder
+      )
+    };
+    return Promise.resolve();
   }
 
   public findRemindersForTask(userId: string, taskId: string): Promise<readonly ReminderRecord[]> {
@@ -340,16 +375,32 @@ export class MemoryDatabase implements BackendDatabase {
     return true;
   }
 
-  public findIdempotentResult(
+  public claimIdempotency(
     userId: string,
     scope: string,
-    now: number
-  ): Promise<HttpResult<ApiData> | undefined> {
-    return Promise.resolve(
-      this.snapshot.idempotency.find(
-        ({ key, expiresAt }) => key === `${userId}:${scope}` && expiresAt > now
-      )?.result
+    now: number,
+    expiresAt: number
+  ): Promise<IdempotencyClaim> {
+    const key = `${userId}:${scope}`;
+    const existing = this.snapshot.idempotency.find(
+      (record) => record.key === key && record.expiresAt > now
     );
+    if (existing?.result !== undefined) {
+      return Promise.resolve({ kind: 'result', result: existing.result });
+    }
+    if (existing !== undefined) {
+      return Promise.resolve({ kind: 'pending' });
+    }
+    this.snapshot = {
+      ...this.snapshot,
+      idempotency: [
+        ...this.snapshot.idempotency.filter(
+          (record) => record.key !== key || record.expiresAt > now
+        ),
+        { key, expiresAt }
+      ]
+    };
+    return Promise.resolve({ kind: 'claimed' });
   }
 
   public saveIdempotentResult(
@@ -373,14 +424,27 @@ export class MemoryDatabase implements BackendDatabase {
     return Promise.resolve();
   }
 
+  public releaseIdempotencyClaim(userId: string, scope: string): Promise<void> {
+    const key = `${userId}:${scope}`;
+    this.snapshot = {
+      ...this.snapshot,
+      idempotency: this.snapshot.idempotency.filter(
+        (record) => record.key !== key || record.result !== undefined
+      )
+    };
+    return Promise.resolve();
+  }
+
   public purgeUser(userId: string): Promise<void> {
     this.snapshot = {
       ...this.snapshot,
       users: this.snapshot.users.map((user) =>
         user.id === userId
           ? {
-              ...user,
-              status: 'DELETED'
+              id: user.id,
+              status: 'DELETED',
+              createdAt: user.createdAt,
+              updatedAt: user.updatedAt
             }
           : user
       ),
@@ -394,7 +458,8 @@ export class MemoryDatabase implements BackendDatabase {
       reminderGrants: Object.fromEntries(
         Object.entries(this.snapshot.reminderGrants).filter(([id]) => id !== userId)
       ),
-      weeklyReviews: this.snapshot.weeklyReviews.filter((review) => review.userId !== userId)
+      weeklyReviews: this.snapshot.weeklyReviews.filter((review) => review.userId !== userId),
+      dailyReviews: this.snapshot.dailyReviews.filter((review) => review.userId !== userId)
     };
     return Promise.resolve();
   }
@@ -418,6 +483,23 @@ export class MemoryDatabase implements BackendDatabase {
     this.snapshot = {
       ...this.snapshot,
       weeklyReviews: [...without, review]
+    };
+    return Promise.resolve();
+  }
+
+  public findDailyReview(userId: string, date: string): Promise<DailyReviewRecord | undefined> {
+    return Promise.resolve(
+      this.snapshot.dailyReviews.find((review) => review.userId === userId && review.date === date)
+    );
+  }
+
+  public saveDailyReview(review: DailyReviewRecord): Promise<void> {
+    const without = this.snapshot.dailyReviews.filter(
+      (candidate) => !(candidate.userId === review.userId && candidate.date === review.date)
+    );
+    this.snapshot = {
+      ...this.snapshot,
+      dailyReviews: [...without, review]
     };
     return Promise.resolve();
   }

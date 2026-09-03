@@ -1,0 +1,107 @@
+.daily-page {
+  padding-bottom: 80rpx;
+}
+
+.date-nav,
+.stats-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 28rpx;
+}
+
+.date-nav button {
+  margin: 0;
+  color: var(--accent-deep);
+  background: transparent;
+  font-size: 24rpx;
+}
+
+.date-nav button::after {
+  border: 0;
+}
+
+.stats-card {
+  flex-wrap: wrap;
+  padding: 28rpx;
+}
+
+.stat {
+  display: flex;
+  width: 25%;
+  flex-direction: column;
+  align-items: center;
+  gap: 6rpx;
+  color: var(--ink-soft);
+  font-size: 22rpx;
+}
+
+.stat text:first-child {
+  color: var(--ink);
+  font-family: 'Songti SC', 'STSong', serif;
+  font-size: 36rpx;
+  font-weight: 700;
+}
+
+.stats-meta {
+  width: 100%;
+  margin-top: 24rpx;
+  color: var(--ink-soft);
+  font-size: 24rpx;
+  text-align: center;
+}
+
+.stale-tip {
+  margin-top: 20rpx;
+  padding: 18rpx;
+  border-radius: 8rpx;
+  color: #92400e;
+  background: #fef3c7;
+  font-size: 24rpx;
+}
+
+.review-card {
+  margin-top: 28rpx;
+  padding: 28rpx;
+}
+
+.source {
+  color: var(--accent-deep);
+  font-size: 22rpx;
+}
+
+.summary {
+  margin-top: 12rpx;
+  font-size: 28rpx;
+  line-height: 1.7;
+}
+
+.block-title {
+  margin-top: 28rpx;
+  font-family: 'Songti SC', 'STSong', serif;
+  font-size: 30rpx;
+  font-weight: 700;
+}
+
+.review-item {
+  display: flex;
+  padding: 18rpx 0;
+  border-top: 1rpx solid var(--line);
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.item-title {
+  font-size: 27rpx;
+  font-weight: 600;
+}
+
+.item-detail {
+  color: var(--ink-soft);
+  font-size: 24rpx;
+  line-height: 1.5;
+}
+
+.generate-button {
+  margin-top: 28rpx;
+}

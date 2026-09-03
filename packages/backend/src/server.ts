@@ -1,10 +1,14 @@
 import process from 'node:process';
 
+import { shanghaiDateKey } from '@today-todo/domain';
 import pg from 'pg';
 
 import { ApiService } from './api-service.js';
 import { startServer } from './http-server.js';
-import { createOpenAiCompatibleLlmClient } from './llm-client.js';
+import {
+  createOpenAiCompatibleDailyReviewClient,
+  createOpenAiCompatibleLlmClient
+} from './llm-client.js';
 import { PostgresDatabase } from './postgres-database.js';
 import { Schedulers } from './schedulers.js';
 import { createFakeWeChatIdentityResolver, createWechatClient } from './wechat.js';
@@ -15,6 +19,7 @@ const REMINDER_INTERVAL_MS = 60_000;
 const MAINTENANCE_INTERVAL_MS = 60 * 60_000;
 const DEFAULT_PORT = 8080;
 const DEFAULT_REMINDER_PAGE = 'pages/todos/index';
+const RECURRENCE_HORIZON_MS = 60 * 24 * 60 * 60 * 1000;
 
 function env(name: string): string {
   return process.env[name] ?? '';
@@ -23,12 +28,6 @@ function env(name: string): string {
 function logError(error: unknown, operation: string): void {
   const message = error instanceof Error ? error.message : String(error);
   console.error(`[${operation}] ${message}`);
-}
-
-function localDateString(now: number): string {
-  const date = new Date(now);
-  const pad = (value: number): string => String(value).padStart(2, '0');
-  return `${String(date.getFullYear())}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
 function parseTemplateFields(raw: string): Record<string, 'title' | 'dueAt'> {
@@ -87,7 +86,11 @@ function main(): void {
     database
   });
 
-  const fakeLogin = env('DEV_FAKE_LOGIN') === '1';
+  const fakeLoginRequested = env('DEV_FAKE_LOGIN') === '1';
+  if (fakeLoginRequested && env('NODE_ENV') === 'production') {
+    throw new Error('DEV_FAKE_LOGIN cannot be enabled when NODE_ENV=production');
+  }
+  const fakeLogin = fakeLoginRequested;
   const resolveWeChatIdentity = fakeLogin
     ? createFakeWeChatIdentityResolver()
     : (input: { readonly channel: 'miniprogram' | 'web'; readonly code: string }) =>
@@ -104,12 +107,21 @@ function main(): void {
           model: llmModel
         })
       : undefined;
+  const generateDailyReviewWithLlm =
+    llmApiKey.length > 0 && llmBaseUrl.length > 0
+      ? createOpenAiCompatibleDailyReviewClient({
+          baseUrl: llmBaseUrl,
+          apiKey: llmApiKey,
+          model: llmModel
+        })
+      : undefined;
 
   const api = new ApiService({
     database,
     now,
     resolveWeChatIdentity,
-    ...(generateWeeklyReviewWithLlm === undefined ? {} : { generateWeeklyReviewWithLlm })
+    ...(generateWeeklyReviewWithLlm === undefined ? {} : { generateWeeklyReviewWithLlm }),
+    ...(generateDailyReviewWithLlm === undefined ? {} : { generateDailyReviewWithLlm })
   });
   const schedulers = new Schedulers({
     database,
@@ -133,7 +145,8 @@ function main(): void {
     });
   };
   const runMaintenance = (): void => {
-    void schedulers.materializeAndClean(localDateString(now())).catch((error: unknown) => {
+    const throughDate = shanghaiDateKey(now() + RECURRENCE_HORIZON_MS);
+    void schedulers.materializeAndClean(throughDate).catch((error: unknown) => {
       logError(error, 'materializeAndClean');
     });
   };

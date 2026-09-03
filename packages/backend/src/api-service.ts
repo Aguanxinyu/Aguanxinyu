@@ -3,6 +3,8 @@ import { createHash, randomBytes } from 'node:crypto';
 import type { ApiMeta, RecurrenceRule, Task } from '@today-todo/contracts';
 import {
   aiAllowed,
+  buildDailyFacts,
+  buildRulesDailyReview,
   buildRulesReview,
   buildWeeklyFacts,
   cancelReminder,
@@ -11,6 +13,7 @@ import {
   createReminderForTask,
   defaultWeekStart,
   DomainError,
+  expandOccurrences,
   isValidWeekStart,
   occurrenceKey,
   reactivateReminder,
@@ -18,6 +21,7 @@ import {
   resolveIdentityMerge,
   restoreTask,
   sortTasks,
+  shanghaiDateKey,
   taskBelongsToDate,
   taskOverlapsDateRange,
   taskSortTuple,
@@ -30,6 +34,7 @@ import {
   weekEndExclusiveMs,
   weekStartForInstant,
   type AuthChannel,
+  type DailyReviewFacts,
   type TaskSortTuple,
   type WeChatIdentity,
   type WeeklyReviewFacts
@@ -37,7 +42,8 @@ import {
 import { z, ZodError } from 'zod';
 
 import type { BackendDatabase } from './database.js';
-import type { LlmWeeklyContent } from './llm-client.js';
+import type { DailyReviewRecord, DailyReviewView } from './daily-review-types.js';
+import type { LlmDailyContent, LlmWeeklyContent } from './llm-client.js';
 import { INBOX_LIST_ID } from './types.js';
 import type {
   ApiData,
@@ -59,6 +65,21 @@ const IDEMPOTENCY_LIFETIME_MS = 24 * 60 * 60 * 1000;
 const MAX_REMINDER_GRANTS = 20;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_WEEKLY_GENERATIONS = 5;
+const MAX_DAILY_GENERATIONS = 3;
+const RECURRENCE_HORIZON_MS = 60 * 24 * 60 * 60 * 1000;
+
+function isValidDateKey(value: string): boolean {
+  if (!DATE_PATTERN.test(value)) {
+    return false;
+  }
+  const [year, month, day] = value.split('-').map(Number);
+  const parsed = new Date(Date.UTC(year ?? 0, (month ?? 0) - 1, day ?? 0));
+  return (
+    parsed.getUTCFullYear() === year &&
+    parsed.getUTCMonth() === (month ?? 0) - 1 &&
+    parsed.getUTCDate() === day
+  );
+}
 
 const locationSchema = z.discriminatedUnion('source', [
   z.object({
@@ -78,19 +99,19 @@ const locationSchema = z.discriminatedUnion('source', [
 const recurrenceSchema = z.discriminatedUnion('frequency', [
   z.object({
     frequency: z.literal('DAILY'),
-    startDate: z.string().regex(DATE_PATTERN),
-    endDate: z.string().regex(DATE_PATTERN).optional()
+    startDate: z.string().refine(isValidDateKey),
+    endDate: z.string().refine(isValidDateKey).optional()
   }),
   z.object({
     frequency: z.literal('WEEKLY'),
-    startDate: z.string().regex(DATE_PATTERN),
-    endDate: z.string().regex(DATE_PATTERN).optional(),
+    startDate: z.string().refine(isValidDateKey),
+    endDate: z.string().refine(isValidDateKey).optional(),
     weekdays: z.array(z.number().int().min(1).max(7)).min(1).max(7)
   }),
   z.object({
     frequency: z.literal('MONTHLY'),
-    startDate: z.string().regex(DATE_PATTERN),
-    endDate: z.string().regex(DATE_PATTERN).optional(),
+    startDate: z.string().refine(isValidDateKey),
+    endDate: z.string().refine(isValidDateKey).optional(),
     monthDay: z.number().int().min(1).max(31)
   })
 ]);
@@ -113,15 +134,15 @@ const createTaskSchema = z.object({
 const updateTaskSchema = z.object({
   version: z.number().int().positive(),
   title: z.string().max(100).optional(),
-  notes: z.string().max(1000).optional(),
+  notes: z.string().max(1000).nullable().optional(),
   priority: z.enum(['HIGH', 'MEDIUM', 'LOW']).optional(),
-  startAt: z.number().optional(),
+  startAt: z.number().nullable().optional(),
   startHasTime: z.boolean().optional(),
-  dueAt: z.number().optional(),
+  dueAt: z.number().nullable().optional(),
   dueHasTime: z.boolean().optional(),
   listId: z.string().optional(),
   tagIds: z.array(z.string()).max(5).optional(),
-  location: locationSchema.optional(),
+  location: locationSchema.nullable().optional(),
   reminderEnabled: z.boolean().optional()
 });
 
@@ -255,6 +276,9 @@ export interface ApiServiceOptions {
   readonly generateWeeklyReviewWithLlm?: (
     facts: WeeklyReviewFacts
   ) => Promise<LlmWeeklyContent | null>;
+  readonly generateDailyReviewWithLlm?: (
+    facts: DailyReviewFacts
+  ) => Promise<LlmDailyContent | null>;
 }
 
 export class ApiService {
@@ -267,6 +291,9 @@ export class ApiService {
   private readonly generateWeeklyReviewWithLlm?: (
     facts: WeeklyReviewFacts
   ) => Promise<LlmWeeklyContent | null>;
+  private readonly generateDailyReviewWithLlm?: (
+    facts: DailyReviewFacts
+  ) => Promise<LlmDailyContent | null>;
 
   public constructor(options: ApiServiceOptions) {
     this.database = options.database;
@@ -287,6 +314,9 @@ export class ApiService {
     }
     if (options.generateWeeklyReviewWithLlm !== undefined) {
       this.generateWeeklyReviewWithLlm = options.generateWeeklyReviewWithLlm;
+    }
+    if (options.generateDailyReviewWithLlm !== undefined) {
+      this.generateDailyReviewWithLlm = options.generateDailyReviewWithLlm;
     }
   }
 
@@ -315,26 +345,41 @@ export class ApiService {
           return asApiData(failure(400, 'REQUEST_ID_REQUIRED', '写操作必须提供请求标识'));
         }
         idempotencyScope = `${method}:${request.path}:${request.requestId}`;
-        const existing = await this.database.findIdempotentResult(
+        const claim = await this.database.claimIdempotency(
           user.id,
           idempotencyScope,
-          this.now()
+          this.now(),
+          this.now() + IDEMPOTENCY_LIFETIME_MS
         );
-        if (existing !== undefined) {
-          return existing;
+        if (claim.kind === 'result') {
+          return claim.result;
+        }
+        if (claim.kind === 'pending') {
+          return asApiData(failure(409, 'REQUEST_IN_PROGRESS', '相同请求正在处理中，请稍后重试'));
         }
       }
 
-      const result = await this.routeAuthenticated(user, effectiveRequest);
-      if (idempotencyScope !== undefined && result.status >= 200 && result.status < 400) {
-        await this.database.saveIdempotentResult(
-          user.id,
-          idempotencyScope,
-          result,
-          this.now() + IDEMPOTENCY_LIFETIME_MS
-        );
+      try {
+        const result = await this.routeAuthenticated(user, effectiveRequest);
+        if (idempotencyScope !== undefined) {
+          if (result.status >= 200 && result.status < 400) {
+            await this.database.saveIdempotentResult(
+              user.id,
+              idempotencyScope,
+              result,
+              this.now() + IDEMPOTENCY_LIFETIME_MS
+            );
+          } else {
+            await this.database.releaseIdempotencyClaim(user.id, idempotencyScope);
+          }
+        }
+        return result;
+      } catch (error) {
+        if (idempotencyScope !== undefined) {
+          await this.database.releaseIdempotencyClaim(user.id, idempotencyScope);
+        }
+        throw error;
       }
-      return result;
     } catch (error) {
       return this.errorResult(error);
     }
@@ -495,6 +540,12 @@ export class ApiService {
     if (request.method === 'POST' && request.path === '/v1/account/deletion') {
       return this.startAccountDeletion(user);
     }
+    if (request.method === 'GET' && request.path === '/v1/daily-reviews') {
+      return this.getDailyReview(user, request.query);
+    }
+    if (request.method === 'POST' && request.path === '/v1/daily-reviews/generate') {
+      return this.generateDailyReview(user, request.body);
+    }
     if (request.method === 'GET' && request.path === '/v1/weekly-reviews/current') {
       return this.getCurrentWeeklyReview(user);
     }
@@ -601,6 +652,8 @@ export class ApiService {
       startHasTime: input.startHasTime,
       dueHasTime: input.dueHasTime,
       ...(input.notes === undefined ? {} : { notes: input.notes }),
+      ...(input.startAt === undefined ? {} : { startAt: input.startAt }),
+      ...(input.dueAt === undefined ? {} : { dueAt: input.dueAt }),
       ...(input.location === undefined ? {} : { location: input.location })
     };
     const series: SeriesRecord = {
@@ -613,17 +666,44 @@ export class ApiService {
       createdAt: now,
       updatedAt: now
     };
+    const horizonDate = shanghaiDateKey(now + RECURRENCE_HORIZON_MS);
+    const throughDate = recurrence.startDate > horizonDate ? recurrence.startDate : horizonDate;
+    const occurrenceDates = expandOccurrences(series, recurrence.startDate, throughDate);
+    const firstDate = occurrenceDates[0];
+    if (firstDate === undefined) {
+      throw new DomainError('RECURRENCE_INVALID_RANGE');
+    }
+
+    const tasks = occurrenceDates.map((date) => this.taskFromSeries(series, date, now));
+    let firstTask = tasks[0] as Task;
+    let reminder: ReminderRecord | undefined;
+    if (input.reminderEnabled === true) {
+      reminder = {
+        ...createReminderForTask(firstTask, now, await this.database.nextId('reminder')),
+        title: firstTask.title
+      };
+      firstTask = { ...firstTask, remindAt: reminder.fireAt };
+      tasks[0] = firstTask;
+    }
+
     await this.database.saveSeries(series);
-    const task = this.taskFromSeries(series, recurrence.startDate, now);
-    await this.database.saveTask(task);
+    for (const task of tasks) {
+      await this.database.saveTask(task);
+    }
+    if (reminder !== undefined) {
+      await this.database.saveReminder(reminder);
+    }
     await this.database.saveSeries({
       ...series,
-      materializedThrough: recurrence.startDate
+      materializedThrough: throughDate
     });
-    return success(201, task);
+    return success(201, firstTask);
   }
 
   public taskFromSeries(series: SeriesRecord, occurrenceDate: string, now: number): Task {
+    const startMs = Date.parse(`${series.startDate}T00:00:00+08:00`);
+    const occurrenceMs = Date.parse(`${occurrenceDate}T00:00:00+08:00`);
+    const scheduleOffset = occurrenceMs - startMs;
     return {
       id: occurrenceKey(series.id, occurrenceDate),
       userId: series.userId,
@@ -640,6 +720,12 @@ export class ApiService {
       createdAt: now,
       updatedAt: now,
       ...(series.template.notes === undefined ? {} : { notes: series.template.notes }),
+      ...(series.template.startAt === undefined
+        ? {}
+        : { startAt: series.template.startAt + scheduleOffset }),
+      ...(series.template.dueAt === undefined
+        ? {}
+        : { dueAt: series.template.dueAt + scheduleOffset }),
       ...(series.template.location === undefined ? {} : { location: series.template.location })
     };
   }
@@ -690,7 +776,9 @@ export class ApiService {
     }
     const updated =
       action === 'complete' ? completeTask(task, this.now()) : uncompleteTask(task, this.now());
-    await this.database.saveTask(updated);
+    if (updated !== task && !(await this.database.saveTask(updated, task.version))) {
+      return failure(409, 'VERSION_CONFLICT', '任务已被其他操作修改，请刷新后重试');
+    }
     return success(200, updated);
   }
 
@@ -720,21 +808,35 @@ export class ApiService {
     }
 
     const now = this.now();
-    const updated: Task = {
+    const updated = {
       ...existing,
       ...(input.title === undefined ? {} : { title: input.title }),
-      ...(input.notes === undefined ? {} : { notes: input.notes }),
+      ...(input.notes === undefined || input.notes === null ? {} : { notes: input.notes }),
       ...(input.priority === undefined ? {} : { priority: input.priority }),
-      ...(input.startAt === undefined ? {} : { startAt: input.startAt }),
+      ...(input.startAt === undefined || input.startAt === null ? {} : { startAt: input.startAt }),
       ...(input.startHasTime === undefined ? {} : { startHasTime: input.startHasTime }),
-      ...(input.dueAt === undefined ? {} : { dueAt: input.dueAt }),
+      ...(input.dueAt === undefined || input.dueAt === null ? {} : { dueAt: input.dueAt }),
       ...(input.dueHasTime === undefined ? {} : { dueHasTime: input.dueHasTime }),
-      ...(input.location === undefined ? {} : { location: input.location }),
+      ...(input.location === undefined || input.location === null
+        ? {}
+        : { location: input.location }),
       listId,
       tagIds,
       version: existing.version + 1,
       updatedAt: now
-    };
+    } satisfies Task;
+    if (input.notes === null) {
+      delete updated.notes;
+    }
+    if (input.startAt === null) {
+      delete updated.startAt;
+    }
+    if (input.dueAt === null) {
+      delete updated.dueAt;
+    }
+    if (input.location === null) {
+      delete updated.location;
+    }
     const validation = validateTaskInput(updated);
     if (!validation.valid) {
       return failure(400, validation.issues[0]?.code ?? 'TASK_INVALID', '待办信息不完整');
@@ -752,19 +854,22 @@ export class ApiService {
     );
     let savedTask: Task;
     if (sync.kind === 'active') {
-      await this.database.saveReminder(sync.reminder);
       savedTask = { ...updated, remindAt: sync.reminder.fireAt };
     } else if (sync.kind === 'disabled') {
-      if (sync.reminder !== null) {
-        await this.database.saveReminder(sync.reminder);
-      }
       const withoutReminder = { ...updated };
       delete withoutReminder.remindAt;
       savedTask = withoutReminder;
     } else {
       savedTask = updated;
     }
-    await this.database.saveTask(savedTask);
+    if (!(await this.database.saveTask(savedTask, existing.version))) {
+      return failure(409, 'VERSION_CONFLICT', '任务已被其他操作修改，请刷新后重试');
+    }
+    if (sync.kind === 'active') {
+      await this.database.saveReminder(sync.reminder);
+    } else if (sync.kind === 'disabled' && sync.reminder !== null) {
+      await this.database.saveReminder(sync.reminder);
+    }
     return success(200, savedTask);
   }
 
@@ -819,18 +924,18 @@ export class ApiService {
   ): Promise<HttpResult<readonly Task[]>> {
     const dueOnRaw = query?.dueOn;
     const dueOn = typeof dueOnRaw === 'string' && dueOnRaw.length > 0 ? dueOnRaw : undefined;
-    if (dueOn !== undefined && !DATE_PATTERN.test(dueOn)) {
+    if (dueOn !== undefined && !isValidDateKey(dueOn)) {
       return failure(400, 'INVALID_DUE_ON', 'dueOn 必须是 YYYY-MM-DD');
     }
     const dueFromRaw = query?.dueFrom;
     const dueFrom =
       typeof dueFromRaw === 'string' && dueFromRaw.length > 0 ? dueFromRaw : undefined;
-    if (dueFrom !== undefined && !DATE_PATTERN.test(dueFrom)) {
+    if (dueFrom !== undefined && !isValidDateKey(dueFrom)) {
       return failure(400, 'INVALID_DUE_FROM', 'dueFrom 必须是 YYYY-MM-DD');
     }
     const dueToRaw = query?.dueTo;
     const dueTo = typeof dueToRaw === 'string' && dueToRaw.length > 0 ? dueToRaw : undefined;
-    if (dueTo !== undefined && !DATE_PATTERN.test(dueTo)) {
+    if (dueTo !== undefined && !isValidDateKey(dueTo)) {
       return failure(400, 'INVALID_DUE_TO', 'dueTo 必须是 YYYY-MM-DD');
     }
     if (dueFrom !== undefined && dueTo !== undefined && dueFrom > dueTo) {
@@ -856,9 +961,9 @@ export class ApiService {
     const startIndex =
       cursor === undefined
         ? 0
-        : tasks.findIndex((task) => compareSortTuples(taskSortTuple(task), cursor) === 0);
+        : tasks.findIndex((task) => compareSortTuples(taskSortTuple(task), cursor) > 0);
     const candidates =
-      cursor === undefined ? tasks : startIndex === -1 ? [] : tasks.slice(startIndex + 1);
+      cursor === undefined ? tasks : startIndex === -1 ? [] : tasks.slice(startIndex);
     const page = candidates.slice(0, limit);
     const hasMore = candidates.length > page.length;
     const lastTask = page[page.length - 1];
@@ -873,7 +978,9 @@ export class ApiService {
       return failure(404, 'TASK_NOT_FOUND', '待办不存在或已删除');
     }
     const updated = trashTask(task, this.now());
-    await this.database.saveTask(updated);
+    if (!(await this.database.saveTask(updated, task.version))) {
+      return failure(409, 'VERSION_CONFLICT', '任务已被其他操作修改，请刷新后重试');
+    }
     for (const reminder of await this.database.findRemindersForTask(user.id, taskId)) {
       if (reminder.state === 'SCHEDULED') {
         await this.database.saveReminder({ ...cancelReminder(reminder), title: reminder.title });
@@ -896,7 +1003,9 @@ export class ApiService {
       ...restoreTask(task, now),
       listId
     };
-    await this.database.saveTask(restored);
+    if (!(await this.database.saveTask(restored, task.version))) {
+      return failure(409, 'VERSION_CONFLICT', '任务已被其他操作修改，请刷新后重试');
+    }
     const reminders = await this.database.findRemindersForTask(user.id, taskId);
     const reminder = reminders.find((candidate) => candidate.state === 'SKIPPED');
     if (reminder !== undefined) {
@@ -982,6 +1091,103 @@ export class ApiService {
     }
     await this.database.deleteTag(user.id, tagId);
     return success(204, null);
+  }
+
+  private async collectDailyFacts(
+    user: UserRecord,
+    date: string,
+    now: number
+  ): Promise<DailyReviewFacts> {
+    const [tasks, lists] = await Promise.all([
+      this.database.tasksForUser(user.id),
+      this.database.listsForUser(user.id)
+    ]);
+    return buildDailyFacts({
+      date,
+      now,
+      tasks,
+      listNames: Object.fromEntries(lists.map((list) => [list.id, list.name]))
+    });
+  }
+
+  private dailyFactsHash(facts: DailyReviewFacts): string {
+    return createHash('sha256')
+      .update(JSON.stringify({ date: facts.date, stats: facts.stats, tasks: facts.tasks }))
+      .digest('hex');
+  }
+
+  private async getDailyReview(
+    user: UserRecord,
+    query: HttpRequest['query']
+  ): Promise<HttpResult<DailyReviewView>> {
+    const date = query?.date;
+    if (date === undefined || !isValidDateKey(date)) {
+      return failure(400, 'INVALID_REVIEW_DATE', 'date 必须是 YYYY-MM-DD');
+    }
+    const now = this.now();
+    const today = shanghaiDateKey(now);
+    if (date > today) {
+      return failure(400, 'DAILY_REVIEW_FUTURE', '不能总结未来日期');
+    }
+    const facts = await this.collectDailyFacts(user, date, now);
+    const factsHash = this.dailyFactsHash(facts);
+    const review = (await this.database.findDailyReview(user.id, date)) ?? null;
+    return success(200, {
+      date,
+      isCompleteDay: date < today,
+      needsRefresh: review !== null && review.factsHash !== factsHash,
+      stats: facts.stats,
+      review
+    });
+  }
+
+  private async generateDailyReview(
+    user: UserRecord,
+    body: unknown
+  ): Promise<HttpResult<DailyReviewRecord>> {
+    const input = z.object({ date: z.string(), force: z.boolean().optional() }).parse(body);
+    if (!isValidDateKey(input.date)) {
+      return failure(400, 'INVALID_REVIEW_DATE', 'date 必须是 YYYY-MM-DD');
+    }
+    const now = this.now();
+    if (input.date > shanghaiDateKey(now)) {
+      return failure(400, 'DAILY_REVIEW_FUTURE', '不能总结未来日期');
+    }
+    const facts = await this.collectDailyFacts(user, input.date, now);
+    if (facts.stats.total === 0) {
+      return failure(400, 'DAILY_REVIEW_EMPTY', '这一天还没有记录的安排');
+    }
+    const factsHash = this.dailyFactsHash(facts);
+    const existing = await this.database.findDailyReview(user.id, input.date);
+    if (existing !== undefined && existing.factsHash === factsHash && input.force !== true) {
+      return success(200, existing);
+    }
+    if (existing !== undefined && existing.generationCount >= MAX_DAILY_GENERATIONS) {
+      return failure(429, 'DAILY_REVIEW_RATE_LIMITED', '这一天的总结生成次数已达上限');
+    }
+
+    const rules = buildRulesDailyReview(facts);
+    const llm = await this.generateDailyReviewWithLlm?.(facts);
+    const content = llm ?? rules;
+    const review: DailyReviewRecord = {
+      id: existing?.id ?? (await this.database.nextId('daily')),
+      userId: user.id,
+      date: input.date,
+      status: 'ready',
+      source: llm === null || llm === undefined ? 'rules' : 'model',
+      stats: facts.stats,
+      summary: content.summary,
+      highlights: content.highlights,
+      blockers: content.blockers,
+      tomorrowSuggestions: content.tomorrowSuggestions,
+      factsHash,
+      ...(llm === null || llm === undefined ? {} : { model: llm.model }),
+      generationCount: (existing?.generationCount ?? 0) + 1,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now
+    };
+    await this.database.saveDailyReview(review);
+    return success(200, review);
   }
 
   private async getCurrentWeeklyReview(user: UserRecord): Promise<HttpResult<WeeklyReviewView>> {

@@ -44,6 +44,32 @@ describe('security and idempotency regressions', () => {
     expect(task.body.success && task.body.data.title).toBe('不同路由');
   });
 
+  it('claims an idempotency key before executing concurrent writes', async () => {
+    const system = createTestSystem({ now: Date.UTC(2026, 6, 31, 4) });
+    const user = await system.login('concurrent-idempotency-user');
+    const request = {
+      method: 'POST' as const,
+      path: '/v1/tasks',
+      token: user.token,
+      requestId: 'same-concurrent-id',
+      body: {
+        title: '只能创建一次',
+        priority: 'MEDIUM',
+        dueHasTime: false,
+        tagIds: []
+      }
+    };
+
+    const results = await Promise.all([system.request(request), system.request(request)]);
+    const tasks = await system.database.tasksForUser(user.userId);
+
+    expect(tasks).toHaveLength(1);
+    expect(results.map(({ status }) => status).sort()).toEqual([201, 409]);
+    expect(
+      results.some(({ body }) => !body.success && body.error.code === 'REQUEST_IN_PROGRESS')
+    ).toBe(true);
+  });
+
   it('does not let one user PATCH another user todo', async () => {
     const system = createTestSystem({ now: Date.UTC(2026, 6, 31, 4) });
     const alice = await system.login('alice');

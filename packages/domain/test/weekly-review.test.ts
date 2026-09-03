@@ -88,6 +88,23 @@ describe('weekly review domain', () => {
     expect(rules.summary.length).toBeGreaterThan(10);
   });
 
+  it('does not count future tasks in the current week as overdue', () => {
+    const facts = buildWeeklyFacts({
+      weekStart: '2026-08-17',
+      now: Date.parse('2026-08-19T12:00:00+08:00'),
+      tasks: [
+        createTask({
+          id: 'future',
+          dueAt: Date.parse('2026-08-21T10:00:00+08:00'),
+          dueHasTime: true
+        })
+      ],
+      listNames: { inbox: '收件箱' }
+    });
+
+    expect(facts.stats.overdueOpen).toBe(0);
+  });
+
   it('flags day overload, undated pileup, repeat miss and reminder misses', () => {
     const weekStart = '2026-08-17';
     const now = Date.parse('2026-08-23T20:00:00+08:00');

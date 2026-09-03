@@ -1,5 +1,6 @@
 const TOKEN_KEY = 'today-todo:session-token';
 const USER_KEY = 'today-todo:user-id';
+const WECHAT_OAUTH_STATE_KEY = 'today-todo:wechat-oauth-state';
 
 export interface ApiErrorBody {
   readonly success: false;
@@ -63,11 +64,47 @@ export interface WeeklyReviewView {
     readonly improvements: readonly {
       readonly type: string;
       readonly title: string;
-      readonly detail: string;
+      readonly rationale: string;
+      readonly suggestion: string;
       readonly severity: string;
-      readonly taskIds?: readonly string[];
+      readonly taskIds: readonly string[];
+    }[];
+    readonly highlights: readonly {
+      readonly title: string;
+      readonly taskIds: readonly string[];
     }[];
   };
+}
+
+export interface DailyReviewItem {
+  readonly title: string;
+  readonly detail: string;
+  readonly taskIds: readonly string[];
+}
+
+export interface DailyReviewRecord {
+  readonly summary: string;
+  readonly source: 'model' | 'rules';
+  readonly model?: string;
+  readonly generationCount: number;
+  readonly highlights: readonly DailyReviewItem[];
+  readonly blockers: readonly DailyReviewItem[];
+  readonly tomorrowSuggestions: readonly DailyReviewItem[];
+}
+
+export interface DailyReviewView {
+  readonly date: string;
+  readonly isCompleteDay: boolean;
+  readonly needsRefresh: boolean;
+  readonly stats: {
+    readonly total: number;
+    readonly completed: number;
+    readonly open: number;
+    readonly overdueOpen: number;
+    readonly highPriorityOpen: number;
+    readonly completionRate: number;
+  };
+  readonly review: DailyReviewRecord | null;
 }
 
 function apiBase(): string {
@@ -112,7 +149,7 @@ export class ApiClientError extends Error {
   }
 }
 
-async function request<T>(
+async function requestEnvelope<T>(
   method: string,
   path: string,
   options: {
@@ -121,7 +158,7 @@ async function request<T>(
     readonly write?: boolean;
     readonly methodOverride?: 'PATCH';
   } = {}
-): Promise<T> {
+): Promise<ApiSuccessBody<T>> {
   const url = new URL(`${apiBase()}${path}`, window.location.origin);
   if (options.query !== undefined) {
     for (const [key, value] of Object.entries(options.query)) {
@@ -153,7 +190,20 @@ async function request<T>(
     }
     throw new ApiClientError(response.status, payload.error.code, payload.error.message);
   }
-  return payload.data;
+  return payload;
+}
+
+function request<T>(
+  method: string,
+  path: string,
+  options: {
+    readonly body?: unknown;
+    readonly query?: Record<string, string>;
+    readonly write?: boolean;
+    readonly methodOverride?: 'PATCH';
+  } = {}
+): Promise<T> {
+  return requestEnvelope<T>(method, path, options).then(({ data }) => data);
 }
 
 export function loginWithCode(
@@ -169,10 +219,22 @@ export function logout(): Promise<null> {
   return request<null>('POST', '/v1/auth/logout', { write: true });
 }
 
-export function listTasks(dueOn?: string): Promise<readonly Task[]> {
-  return request<readonly Task[]>('GET', '/v1/tasks', {
-    ...(dueOn === undefined ? {} : { query: { dueOn } })
-  });
+export async function listTasks(dueOn?: string): Promise<readonly Task[]> {
+  const tasks: Task[] = [];
+  let cursor: string | undefined;
+  do {
+    const query = {
+      ...(dueOn === undefined ? {} : { dueOn }),
+      ...(cursor === undefined ? {} : { cursor })
+    };
+    const page = await requestEnvelope<readonly Task[]>('GET', '/v1/tasks', {
+      ...(Object.keys(query).length === 0 ? {} : { query })
+    });
+    tasks.push(...page.data);
+    const nextCursor = page.meta?.cursor;
+    cursor = page.meta?.hasMore === true && typeof nextCursor === 'string' ? nextCursor : undefined;
+  } while (cursor !== undefined);
+  return tasks;
 }
 
 export function createTask(input: {
@@ -218,10 +280,11 @@ export function updateTask(
   body: {
     readonly version: number;
     readonly title?: string;
-    readonly notes?: string;
+    readonly notes?: string | null;
     readonly priority?: Task['priority'];
-    readonly dueAt?: number;
+    readonly dueAt?: number | null;
     readonly dueHasTime?: boolean;
+    readonly location?: { readonly source: 'MANUAL'; readonly name: string } | null;
   }
 ): Promise<Task> {
   return request<Task>('POST', `/v1/tasks/${taskId}`, {
@@ -262,6 +325,17 @@ export function generateWeeklyReview(weekStart: string): Promise<unknown> {
   });
 }
 
+export function getDailyReview(date: string): Promise<DailyReviewView> {
+  return request('GET', '/v1/daily-reviews', { query: { date } });
+}
+
+export function generateDailyReview(date: string, force = false): Promise<DailyReviewRecord> {
+  return request('POST', '/v1/daily-reviews/generate', {
+    write: true,
+    body: { date, force }
+  });
+}
+
 export function startAccountDeletion(): Promise<{ readonly purgeAfterAt: number }> {
   return request('POST', '/v1/account/deletion', { write: true });
 }
@@ -275,12 +349,20 @@ export function wechatQrConnectUrl(): string | null {
   const redirectUri = encodeURIComponent(
     redirect !== undefined && redirect.length > 0 ? redirect : `${window.location.origin}/#/login`
   );
-  const state = encodeURIComponent(`web-${String(Date.now())}`);
+  const bytes = crypto.getRandomValues(new Uint8Array(24));
+  const state = Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('');
+  sessionStorage.setItem(WECHAT_OAUTH_STATE_KEY, state);
   return `https://open.weixin.qq.com/connect/qrconnect?appid=${encodeURIComponent(appId)}&redirect_uri=${redirectUri}&response_type=code&scope=snsapi_login&state=${state}#wechat_redirect`;
 }
 
+export function consumeWechatOAuthState(received: string | null): boolean {
+  const expected = sessionStorage.getItem(WECHAT_OAUTH_STATE_KEY);
+  sessionStorage.removeItem(WECHAT_OAUTH_STATE_KEY);
+  return expected !== null && received !== null && received === expected;
+}
+
 export function allowDevLogin(): boolean {
-  return import.meta.env.VITE_ALLOW_DEV_LOGIN === '1';
+  return !import.meta.env.PROD && import.meta.env.VITE_ALLOW_DEV_LOGIN === '1';
 }
 
 /** Asia/Shanghai YYYY-MM-DD */

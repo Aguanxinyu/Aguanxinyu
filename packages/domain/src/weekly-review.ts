@@ -234,7 +234,10 @@ export function buildWeeklyFacts(options: BuildWeeklyFactsOptions): WeeklyReview
     if (task.status !== 'TODO' || task.undated || task.dayKey === null) {
       return false;
     }
-    return task.dayKey < shanghaiDateKey(now) || task.dayKey < weekEnd;
+    if (task.dueHasTime && task.dueAt !== undefined) {
+      return task.dueAt < now;
+    }
+    return task.dayKey < shanghaiDateKey(now);
   }).length;
 
   // Carried-over: due before week but still TODO and included via undated? Actually

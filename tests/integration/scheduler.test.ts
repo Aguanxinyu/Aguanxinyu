@@ -71,6 +71,52 @@ describe('background schedulers', () => {
     ]);
   });
 
+  it('preserves schedule times and the first reminder for recurring tasks', async () => {
+    const now = Date.parse('2026-07-31T12:00:00+08:00');
+    const dueAt = Date.parse('2026-07-31T18:00:00+08:00');
+    const system = createTestSystem({ now });
+    const user = await system.login('timed-recurring-user');
+
+    const created = await system.request({
+      method: 'POST',
+      path: '/v1/tasks',
+      token: user.token,
+      requestId: 'timed-series',
+      body: {
+        title: '每日定时复盘',
+        priority: 'MEDIUM',
+        startAt: Date.parse('2026-07-31T17:00:00+08:00'),
+        startHasTime: true,
+        dueAt,
+        dueHasTime: true,
+        reminderEnabled: true,
+        tagIds: [],
+        recurrence: {
+          frequency: 'DAILY',
+          startDate: '2026-07-31',
+          endDate: '2026-08-02'
+        }
+      }
+    });
+
+    expect(created.body.success && created.body.data).toMatchObject({
+      dueAt,
+      remindAt: dueAt - 10 * 60 * 1000
+    });
+    const tasks = await system.database.tasksForUser(user.userId);
+    expect(tasks.map(({ dueAt: taskDueAt }) => taskDueAt)).toEqual([
+      dueAt,
+      dueAt + 24 * 60 * 60 * 1000,
+      dueAt + 2 * 24 * 60 * 60 * 1000
+    ]);
+    expect(
+      await system.database.findRemindersForTask(
+        user.userId,
+        created.body.success ? created.body.data.id : ''
+      )
+    ).toHaveLength(1);
+  });
+
   it('claims and sends a reminder at most once', async () => {
     const now = Date.UTC(2026, 6, 31, 4);
     const system = createTestSystem({ now });
@@ -105,6 +151,83 @@ describe('background schedulers', () => {
       userId: user.userId,
       title: '准时提交'
     });
+  });
+
+  it('atomically claims a reminder across concurrent dispatches', async () => {
+    const now = Date.UTC(2026, 6, 31, 4);
+    const system = createTestSystem({ now });
+    const user = await system.login('concurrent-reminder-user');
+    await system.request({
+      method: 'POST',
+      path: '/v1/reminder-grants',
+      token: user.token,
+      requestId: 'grant-concurrent',
+      body: { accepted: true }
+    });
+    await system.request({
+      method: 'POST',
+      path: '/v1/tasks',
+      token: user.token,
+      requestId: 'task-concurrent',
+      body: {
+        title: '并发提醒',
+        priority: 'HIGH',
+        dueAt: now + 10 * 60 * 1000,
+        dueHasTime: true,
+        reminderEnabled: true,
+        tagIds: []
+      }
+    });
+
+    let sendCount = 0;
+    const api = new ApiService({
+      database: system.database,
+      now: () => now,
+      exchangeLoginCode: (code) => Promise.resolve(code)
+    });
+    const scheduler = new Schedulers({
+      database: system.database,
+      api,
+      now: () => now,
+      sendMessage: () => {
+        sendCount += 1;
+        return Promise.resolve();
+      },
+      reportError: () => undefined
+    });
+
+    await Promise.all([scheduler.dispatchReminders(now), scheduler.dispatchReminders(now)]);
+
+    expect(sendCount).toBe(1);
+  });
+
+  it('marks reminder claims left by a crashed worker as unknown', async () => {
+    const now = Date.UTC(2026, 6, 31, 4);
+    const system = createTestSystem({ now });
+    const user = await system.login('stale-reminder-claim-user');
+    const created = await system.request({
+      method: 'POST',
+      path: '/v1/tasks',
+      token: user.token,
+      requestId: 'stale-reminder-task',
+      body: {
+        title: '中断的提醒',
+        priority: 'MEDIUM',
+        dueAt: now + 10 * 60 * 1000,
+        dueHasTime: true,
+        reminderEnabled: true,
+        tagIds: []
+      }
+    });
+    const taskId = created.body.success ? created.body.data.id : '';
+
+    await system.database.claimRemindersDueAtOrBefore(now);
+    system.setNow(now + 6 * 60 * 1000);
+    await system.runMaintenance('2026-07-31');
+
+    expect((await system.database.findRemindersForTask(user.userId, taskId))[0]?.state).toBe(
+      'UNKNOWN'
+    );
   });
 
   it('cancels a scheduled reminder on trash and reactivates it on restore', async () => {
@@ -295,6 +418,7 @@ describe('background schedulers', () => {
       path: '/v1/auth/login',
       body: { code: 'account-purge-user' }
     });
-    expect(relogin.status).toBe(403);
+    expect(relogin.status).toBe(200);
+    expect(relogin.body.success && relogin.body.data.userId).not.toBe(accountUser.userId);
   });
 });

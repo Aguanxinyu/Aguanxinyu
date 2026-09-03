@@ -24,7 +24,7 @@ describe.skipIf(!enabled)('PostgreSQL-backed database', () => {
 
   beforeEach(async () => {
     await pool.query(
-      'TRUNCATE users, sessions, tasks, lists, tags, series, reminders, reminder_grants, idempotency, sequences RESTART IDENTITY CASCADE;'
+      'TRUNCATE users, sessions, tasks, lists, tags, series, reminders, reminder_grants, idempotency, weekly_reviews, daily_reviews, sequences RESTART IDENTITY CASCADE;'
     );
   });
 
@@ -293,7 +293,8 @@ describe.skipIf(!enabled)('PostgreSQL-backed database', () => {
       path: '/v1/auth/login',
       body: { code: 'pg-delete-user' }
     });
-    expect(relogin.status).toBe(403);
+    expect(relogin.status).toBe(200);
+    expect(relogin.body.success && relogin.body.data.userId).not.toBe(user.userId);
   });
 
   it('claims and sends a reminder at most once', async () => {

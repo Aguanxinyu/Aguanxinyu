@@ -1,0 +1,53 @@
+<view class="page daily-page" style="padding-top: {{navPaddingTop}}px;">
+  <view class="page-title">每日总结</view>
+  <view class="page-subtitle">{{date}} · {{isCompleteDay ? '完整日' : '今日阶段总结'}}</view>
+
+  <view class="date-nav">
+    <button data-delta="-1" bindtap="onShiftDate">前一天</button>
+    <text>{{dateLabel}}</text>
+    <button data-delta="1" bindtap="onShiftDate" disabled="{{isToday}}">后一天</button>
+  </view>
+
+  <view class="card stats-card">
+    <view class="stat"><text>{{stats.total}}</text><text>安排</text></view>
+    <view class="stat"><text>{{stats.completed}}</text><text>完成</text></view>
+    <view class="stat"><text>{{stats.open}}</text><text>未完成</text></view>
+    <view class="stat"><text>{{stats.overdueOpen}}</text><text>逾期</text></view>
+    <view class="stats-meta">完成率 {{completionRate}} · 高优未完成 {{stats.highPriorityOpen}}</view>
+  </view>
+
+  <view wx:if="{{needsRefresh}}" class="stale-tip">任务已有变化，建议重新生成总结。</view>
+
+  <view wx:if="{{review}}" class="card review-card">
+    <view class="source">{{sourceLabel}}</view>
+    <view class="summary">{{review.summary}}</view>
+
+    <view wx:if="{{review.highlights.length}}" class="block-title">今日亮点</view>
+    <view wx:for="{{review.highlights}}" wx:key="title" class="review-item" data-ids="{{item.taskIds}}" bindtap="onOpenTask">
+      <text class="item-title">{{item.title}}</text>
+      <text class="item-detail">{{item.detail}}</text>
+    </view>
+
+    <view wx:if="{{review.blockers.length}}" class="block-title">尚未解决</view>
+    <view wx:for="{{review.blockers}}" wx:key="title" class="review-item" data-ids="{{item.taskIds}}" bindtap="onOpenTask">
+      <text class="item-title">{{item.title}}</text>
+      <text class="item-detail">{{item.detail}}</text>
+    </view>
+
+    <view wx:if="{{review.tomorrowSuggestions.length}}" class="block-title">明日建议</view>
+    <view wx:for="{{review.tomorrowSuggestions}}" wx:key="title" class="review-item" data-ids="{{item.taskIds}}" bindtap="onOpenTask">
+      <text class="item-title">{{item.title}}</text>
+      <text class="item-detail">{{item.detail}}</text>
+    </view>
+  </view>
+
+  <button
+    class="primary-button generate-button"
+    loading="{{generating}}"
+    disabled="{{generating || loading || stats.total === 0}}"
+    bindtap="onGenerate"
+  >
+    {{review ? '重新生成' : '生成每日总结'}}
+  </button>
+  <view wx:if="{{!loading && stats.total === 0}}" class="empty">这一天还没有记录的安排</view>
+</view>

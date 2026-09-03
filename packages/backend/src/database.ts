@@ -10,7 +10,13 @@ import type {
   TodoTag,
   UserRecord
 } from './types.js';
+import type { DailyReviewRecord } from './daily-review-types.js';
 import type { WeeklyReviewRecord } from './weekly-review-types.js';
+
+export type IdempotencyClaim =
+  | { readonly kind: 'claimed' }
+  | { readonly kind: 'pending' }
+  | { readonly kind: 'result'; readonly result: HttpResult<ApiData> };
 
 export interface BackendDatabase {
   nextId(prefix: string): Promise<string>;
@@ -37,7 +43,7 @@ export interface BackendDatabase {
   allTasks(): Promise<readonly Task[]>;
   tasksForUser(userId: string, status?: Task['status']): Promise<readonly Task[]>;
   findTask(userId: string, taskId: string): Promise<Task | undefined>;
-  saveTask(task: Task): Promise<void>;
+  saveTask(task: Task, expectedVersion?: number): Promise<boolean>;
   deleteTask(userId: string, taskId: string): Promise<void>;
 
   listsForUser(userId: string): Promise<readonly TodoList[]>;
@@ -61,25 +67,30 @@ export interface BackendDatabase {
   seriesForUser(userId?: string): Promise<readonly SeriesRecord[]>;
   saveSeries(series: SeriesRecord): Promise<void>;
 
-  remindersDueAtOrBefore(now: number): Promise<readonly ReminderRecord[]>;
+  claimRemindersDueAtOrBefore(now: number): Promise<readonly ReminderRecord[]>;
+  markStaleReminderClaimsUnknown(before: number): Promise<void>;
   findRemindersForTask(userId: string, taskId: string): Promise<readonly ReminderRecord[]>;
   saveReminder(reminder: ReminderRecord): Promise<void>;
   reminderGrantFor(userId: string): Promise<number>;
   addReminderGrant(userId: string, maximum: number): Promise<number>;
   consumeReminderGrant(userId: string): Promise<boolean>;
 
-  findIdempotentResult(
+  claimIdempotency(
     userId: string,
     scope: string,
-    now: number
-  ): Promise<HttpResult<ApiData> | undefined>;
+    now: number,
+    expiresAt: number
+  ): Promise<IdempotencyClaim>;
   saveIdempotentResult(
     userId: string,
     scope: string,
     result: HttpResult<ApiData>,
     expiresAt: number
   ): Promise<void>;
+  releaseIdempotencyClaim(userId: string, scope: string): Promise<void>;
 
   findWeeklyReview(userId: string, weekStart: string): Promise<WeeklyReviewRecord | undefined>;
   saveWeeklyReview(review: WeeklyReviewRecord): Promise<void>;
+  findDailyReview(userId: string, date: string): Promise<DailyReviewRecord | undefined>;
+  saveDailyReview(review: DailyReviewRecord): Promise<void>;
 }

@@ -1,6 +1,7 @@
 import type { ApiResponse, RecurrenceRule, Reminder, Task } from '@today-todo/contracts';
 
 import type { WeeklyReviewRecord, WeeklyReviewView } from './weekly-review-types.js';
+import type { DailyReviewRecord, DailyReviewView } from './daily-review-types.js';
 
 export const INBOX_LIST_ID = 'inbox';
 
@@ -84,6 +85,8 @@ export interface TaskTemplate {
   readonly location?: Task['location'];
   readonly startHasTime: boolean;
   readonly dueHasTime: boolean;
+  readonly startAt?: number;
+  readonly dueAt?: number;
 }
 
 export interface SeriesRecord {
@@ -100,6 +103,7 @@ export interface SeriesRecord {
 
 export interface ReminderRecord extends Reminder {
   readonly title: string;
+  readonly claimedAt?: number;
 }
 
 export interface ReminderGrant {
@@ -120,6 +124,8 @@ export interface SentMessage {
 export type ApiData =
   | AccountDeletionData
   | AuthData
+  | DailyReviewView
+  | DailyReviewRecord
   | ReminderGrant
   | Task
   | TodoList
