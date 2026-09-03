@@ -401,6 +401,12 @@ Page({
     });
   },
 
+  onOpenDailyReview() {
+    void wx.navigateTo({
+      url: `/pages/daily-review/index?date=${encodeURIComponent(this.data.selectedDate)}`
+    });
+  },
+
   onToggleCalendar() {
     const opening = !this.data.calendarOpen;
     const monthCursor = monthKeyFromDateKey(this.data.selectedDate);

@@ -9,7 +9,9 @@ import {
   createList,
   createTask,
   deleteList,
+  generateDailyReview,
   generateWeeklyReview,
+  getDailyReview,
   getCurrentWeeklyReview,
   getToken,
   listLists,
@@ -26,6 +28,8 @@ import {
   updateTask,
   wechatQrConnectUrl,
   type Task,
+  type DailyReviewItem,
+  type DailyReviewView,
   type TodoList,
   type WeeklyReviewView
 } from './api';
@@ -33,6 +37,7 @@ import {
 type Route =
   | { name: 'login' }
   | { name: 'todos' }
+  | { name: 'daily' }
   | { name: 'lists' }
   | { name: 'me' }
   | { name: 'trash' }
@@ -53,6 +58,7 @@ function parseRoute(): Route {
   if (path === 'me') return { name: 'me' };
   if (path === 'trash') return { name: 'trash' };
   if (path === 'weekly' || path === 'weekly-review') return { name: 'weekly' };
+  if (path === 'daily-review') return { name: 'daily' };
   if (path === 'login') return { name: 'login' };
   return { name: 'todos' };
 }
@@ -101,7 +107,7 @@ function shell(active: Route['name'], body: string): string {
       <header class="topnav">
         <div class="brand">今日待办</div>
         <nav class="nav-links">
-          <a href="#/" class="${active === 'todos' ? 'active' : ''}">待办</a>
+          <a href="#/" class="${active === 'todos' || active === 'daily' ? 'active' : ''}">待办</a>
           <a href="#/lists" class="${active === 'lists' ? 'active' : ''}">清单</a>
           <a href="#/me" class="${active === 'me' || active === 'trash' || active === 'weekly' ? 'active' : ''}">我的</a>
         </nav>
@@ -217,7 +223,10 @@ async function renderTodos(): Promise<void> {
           <h1>${selectedDate === shanghaiDateKey() ? '今天' : selectedDate}</h1>
           <div class="subtitle">${String(open.length)} 项安排 · 网页版</div>
         </div>
-        <button type="button" class="btn btn-primary" id="open-editor">写</button>
+        <div class="task-actions">
+          <a class="btn btn-ghost" href="#/daily-review">AI 总结</a>
+          <button type="button" class="btn btn-primary" id="open-editor">写</button>
+        </div>
       </section>
       ${weekStripHtml(selectedDate)}
       <form class="quick-add" id="quick-add">
@@ -585,6 +594,79 @@ async function renderTrash(): Promise<void> {
   }
 }
 
+function dailyItemsHtml(title: string, items: readonly DailyReviewItem[]): string {
+  if (items.length === 0) {
+    return '';
+  }
+  return `<h3>${title}</h3>${items
+    .map(
+      (item) =>
+        `<div class="list-row"><div><strong>${escapeHtml(item.title)}</strong><div class="task-meta">${escapeHtml(item.detail)}</div></div></div>`
+    )
+    .join('')}`;
+}
+
+async function renderDaily(): Promise<void> {
+  app.innerHTML = shell('daily', `<div class="loading">加载中…</div>`);
+  try {
+    const view: DailyReviewView = await getDailyReview(selectedDate);
+    const review = view.review;
+    app.innerHTML = shell(
+      'daily',
+      `
+      <section class="masthead">
+        <div>
+          <h1>每日总结</h1>
+          <div class="subtitle">${view.date} · ${view.isCompleteDay ? '完整日' : '今日阶段总结'}</div>
+        </div>
+        <a class="btn btn-ghost" href="#/">返回待办</a>
+      </section>
+      <div class="calendar-rail">
+        <button type="button" class="btn btn-ghost" id="daily-prev">前一天</button>
+        <strong>${view.date}</strong>
+        <button type="button" class="btn btn-ghost" id="daily-next" ${view.date >= shanghaiDateKey() ? 'disabled' : ''}>后一天</button>
+      </div>
+      <div class="panel">
+        <h2>当日概览</h2>
+        <p>安排 ${String(view.stats.total)} · 完成 ${String(view.stats.completed)} · 未完成 ${String(view.stats.open)} · 逾期 ${String(view.stats.overdueOpen)} · 完成率 ${String(Math.round(view.stats.completionRate * 100))}%</p>
+      </div>
+      ${view.needsRefresh ? `<div class="error">任务已有变化，建议重新生成总结。</div>` : ''}
+      ${
+        review === null
+          ? `<div class="empty">尚未生成每日总结。</div>`
+          : `<div class="panel">
+              <h2>${review.source === 'model' ? 'AI 总结' : '规则总结'}</h2>
+              <p>${escapeHtml(review.summary)}</p>
+              ${dailyItemsHtml('今日亮点', review.highlights)}
+              ${dailyItemsHtml('尚未解决', review.blockers)}
+              ${dailyItemsHtml('明日建议', review.tomorrowSuggestions)}
+            </div>`
+      }
+      <button type="button" class="btn btn-primary" id="generate-daily" ${view.stats.total === 0 ? 'disabled' : ''}>
+        ${review === null ? '生成每日总结' : '重新生成'}
+      </button>
+    `
+    );
+    document.querySelector('#daily-prev')?.addEventListener('click', () => {
+      selectedDate = addDays(selectedDate, -1);
+      void renderDaily();
+    });
+    document.querySelector('#daily-next')?.addEventListener('click', () => {
+      if (selectedDate < shanghaiDateKey()) {
+        selectedDate = addDays(selectedDate, 1);
+        void renderDaily();
+      }
+    });
+    document.querySelector('#generate-daily')?.addEventListener('click', () => {
+      void generateDailyReview(selectedDate, review !== null)
+        .then(() => renderDaily())
+        .catch((error: unknown) => showError(app, error));
+    });
+  } catch (error) {
+    showError(app, error);
+  }
+}
+
 async function renderWeekly(): Promise<void> {
   app.innerHTML = shell('weekly', `<div class="loading">加载中…</div>`);
   try {
@@ -653,6 +735,10 @@ async function render(): Promise<void> {
       return;
     }
     await renderLogin();
+    return;
+  }
+  if (route.name === 'daily') {
+    await renderDaily();
     return;
   }
   if (route.name === 'lists') {

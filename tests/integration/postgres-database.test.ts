@@ -24,7 +24,7 @@ describe.skipIf(!enabled)('PostgreSQL-backed database', () => {
 
   beforeEach(async () => {
     await pool.query(
-      'TRUNCATE users, sessions, tasks, lists, tags, series, reminders, reminder_grants, idempotency, sequences RESTART IDENTITY CASCADE;'
+      'TRUNCATE users, sessions, tasks, lists, tags, series, reminders, reminder_grants, idempotency, weekly_reviews, daily_reviews, sequences RESTART IDENTITY CASCADE;'
     );
   });
 

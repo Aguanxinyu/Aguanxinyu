@@ -5,7 +5,10 @@ import pg from 'pg';
 
 import { ApiService } from './api-service.js';
 import { startServer } from './http-server.js';
-import { createOpenAiCompatibleLlmClient } from './llm-client.js';
+import {
+  createOpenAiCompatibleDailyReviewClient,
+  createOpenAiCompatibleLlmClient
+} from './llm-client.js';
 import { PostgresDatabase } from './postgres-database.js';
 import { Schedulers } from './schedulers.js';
 import { createFakeWeChatIdentityResolver, createWechatClient } from './wechat.js';
@@ -104,12 +107,21 @@ function main(): void {
           model: llmModel
         })
       : undefined;
+  const generateDailyReviewWithLlm =
+    llmApiKey.length > 0 && llmBaseUrl.length > 0
+      ? createOpenAiCompatibleDailyReviewClient({
+          baseUrl: llmBaseUrl,
+          apiKey: llmApiKey,
+          model: llmModel
+        })
+      : undefined;
 
   const api = new ApiService({
     database,
     now,
     resolveWeChatIdentity,
-    ...(generateWeeklyReviewWithLlm === undefined ? {} : { generateWeeklyReviewWithLlm })
+    ...(generateWeeklyReviewWithLlm === undefined ? {} : { generateWeeklyReviewWithLlm }),
+    ...(generateDailyReviewWithLlm === undefined ? {} : { generateDailyReviewWithLlm })
   });
   const schedulers = new Schedulers({
     database,

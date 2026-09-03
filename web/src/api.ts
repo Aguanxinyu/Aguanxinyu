@@ -76,6 +76,37 @@ export interface WeeklyReviewView {
   };
 }
 
+export interface DailyReviewItem {
+  readonly title: string;
+  readonly detail: string;
+  readonly taskIds: readonly string[];
+}
+
+export interface DailyReviewRecord {
+  readonly summary: string;
+  readonly source: 'model' | 'rules';
+  readonly model?: string;
+  readonly generationCount: number;
+  readonly highlights: readonly DailyReviewItem[];
+  readonly blockers: readonly DailyReviewItem[];
+  readonly tomorrowSuggestions: readonly DailyReviewItem[];
+}
+
+export interface DailyReviewView {
+  readonly date: string;
+  readonly isCompleteDay: boolean;
+  readonly needsRefresh: boolean;
+  readonly stats: {
+    readonly total: number;
+    readonly completed: number;
+    readonly open: number;
+    readonly overdueOpen: number;
+    readonly highPriorityOpen: number;
+    readonly completionRate: number;
+  };
+  readonly review: DailyReviewRecord | null;
+}
+
 function apiBase(): string {
   const configured = import.meta.env.VITE_API_BASE_URL;
   return configured !== undefined && configured.length > 0 ? configured.replace(/\/$/, '') : '';
@@ -291,6 +322,17 @@ export function generateWeeklyReview(weekStart: string): Promise<unknown> {
   return request('POST', '/v1/weekly-reviews/generate', {
     write: true,
     body: { weekStart }
+  });
+}
+
+export function getDailyReview(date: string): Promise<DailyReviewView> {
+  return request('GET', '/v1/daily-reviews', { query: { date } });
+}
+
+export function generateDailyReview(date: string, force = false): Promise<DailyReviewRecord> {
+  return request('POST', '/v1/daily-reviews/generate', {
+    write: true,
+    body: { date, force }
   });
 }
 

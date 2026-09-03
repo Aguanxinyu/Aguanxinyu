@@ -1,9 +1,10 @@
 import type { Task } from '@today-todo/contracts';
-import type { WeeklyReviewFacts } from '@today-todo/domain';
+import type { DailyReviewFacts, WeeklyReviewFacts } from '@today-todo/domain';
 
 import { ApiService } from './api-service.js';
 import type { BackendDatabase } from './database.js';
-import type { LlmWeeklyContent } from './llm-client.js';
+import type { DailyReviewRecord, DailyReviewView } from './daily-review-types.js';
+import type { LlmDailyContent, LlmWeeklyContent } from './llm-client.js';
 import { MemoryDatabase } from './memory-database.js';
 import { Schedulers } from './schedulers.js';
 import type {
@@ -68,21 +69,31 @@ type ResponseData<R extends HttpRequest> = R extends {
                     }
                   ? ReminderGrant
                   : R extends {
-                        readonly method: 'POST';
-                        readonly path: '/v1/account/deletion';
+                        readonly method: 'GET';
+                        readonly path: '/v1/daily-reviews';
                       }
-                    ? AccountDeletionData
+                    ? DailyReviewView
                     : R extends {
-                          readonly method: 'GET';
-                          readonly path: '/v1/weekly-reviews' | '/v1/weekly-reviews/current';
+                          readonly method: 'POST';
+                          readonly path: '/v1/daily-reviews/generate';
                         }
-                      ? WeeklyReviewView
+                      ? DailyReviewRecord
                       : R extends {
                             readonly method: 'POST';
-                            readonly path: '/v1/weekly-reviews/generate';
+                            readonly path: '/v1/account/deletion';
                           }
-                        ? WeeklyReviewRecord
-                        : null;
+                        ? AccountDeletionData
+                        : R extends {
+                              readonly method: 'GET';
+                              readonly path: '/v1/weekly-reviews' | '/v1/weekly-reviews/current';
+                            }
+                          ? WeeklyReviewView
+                          : R extends {
+                                readonly method: 'POST';
+                                readonly path: '/v1/weekly-reviews/generate';
+                              }
+                            ? WeeklyReviewRecord
+                            : null;
 
 export interface TestSystemOptions {
   readonly now: number;
@@ -91,6 +102,9 @@ export interface TestSystemOptions {
   readonly generateWeeklyReviewWithLlm?: (
     facts: WeeklyReviewFacts
   ) => Promise<LlmWeeklyContent | null>;
+  readonly generateDailyReviewWithLlm?: (
+    facts: DailyReviewFacts
+  ) => Promise<LlmDailyContent | null>;
 }
 
 export interface LoginResult {
@@ -116,7 +130,10 @@ export class TestSystem {
       resolveWeChatIdentity: createFakeWeChatIdentityResolver(),
       ...(options.generateWeeklyReviewWithLlm === undefined
         ? {}
-        : { generateWeeklyReviewWithLlm: options.generateWeeklyReviewWithLlm })
+        : { generateWeeklyReviewWithLlm: options.generateWeeklyReviewWithLlm }),
+      ...(options.generateDailyReviewWithLlm === undefined
+        ? {}
+        : { generateDailyReviewWithLlm: options.generateDailyReviewWithLlm })
     });
     this.schedulers = new Schedulers({
       database,

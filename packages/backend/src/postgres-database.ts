@@ -2,6 +2,7 @@ import type { ActiveTaskStatus, RecurrenceRule, Task } from '@today-todo/contrac
 import pg from 'pg';
 
 import type { BackendDatabase, IdempotencyClaim } from './database.js';
+import type { DailyReviewRecord } from './daily-review-types.js';
 import {
   INBOX_LIST_ID,
   type ApiData,
@@ -329,6 +330,7 @@ export class PostgresDatabase implements BackendDatabase {
       await client.query('DELETE FROM reminder_grants WHERE user_id = $1', [userId]);
       await client.query('DELETE FROM idempotency WHERE user_id = $1', [userId]);
       await client.query('DELETE FROM weekly_reviews WHERE user_id = $1', [userId]);
+      await client.query('DELETE FROM daily_reviews WHERE user_id = $1', [userId]);
       await client.query('COMMIT');
     } catch (error) {
       await client.query('ROLLBACK');
@@ -806,6 +808,91 @@ export class PostgresDatabase implements BackendDatabase {
         JSON.stringify(review.highlights),
         review.model ?? null,
         review.errorCode ?? null,
+        review.generationCount,
+        review.createdAt,
+        review.updatedAt
+      ]
+    );
+  }
+
+  public async findDailyReview(
+    userId: string,
+    date: string
+  ): Promise<DailyReviewRecord | undefined> {
+    const result = await this.pool.query<{
+      id: string;
+      user_id: string;
+      review_date: string;
+      status: DailyReviewRecord['status'];
+      source: DailyReviewRecord['source'];
+      stats: DailyReviewRecord['stats'];
+      summary: string;
+      highlights: DailyReviewRecord['highlights'];
+      blockers: DailyReviewRecord['blockers'];
+      tomorrow_suggestions: DailyReviewRecord['tomorrowSuggestions'];
+      facts_hash: string;
+      model: string | null;
+      generation_count: number;
+      created_at: number;
+      updated_at: number;
+    }>('SELECT * FROM daily_reviews WHERE user_id = $1 AND review_date = $2 LIMIT 1', [
+      userId,
+      date
+    ]);
+    const row = result.rows[0];
+    if (row === undefined) {
+      return undefined;
+    }
+    return {
+      id: row.id,
+      userId: row.user_id,
+      date: row.review_date,
+      status: row.status,
+      source: row.source,
+      stats: row.stats,
+      summary: row.summary,
+      highlights: row.highlights,
+      blockers: row.blockers,
+      tomorrowSuggestions: row.tomorrow_suggestions,
+      factsHash: row.facts_hash,
+      ...(row.model === null ? {} : { model: row.model }),
+      generationCount: row.generation_count,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    };
+  }
+
+  public async saveDailyReview(review: DailyReviewRecord): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO daily_reviews (
+         id, user_id, review_date, status, source, stats, summary, highlights, blockers,
+         tomorrow_suggestions, facts_hash, model, generation_count, created_at, updated_at
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+       ON CONFLICT (user_id, review_date) DO UPDATE SET
+         status = EXCLUDED.status,
+         source = EXCLUDED.source,
+         stats = EXCLUDED.stats,
+         summary = EXCLUDED.summary,
+         highlights = EXCLUDED.highlights,
+         blockers = EXCLUDED.blockers,
+         tomorrow_suggestions = EXCLUDED.tomorrow_suggestions,
+         facts_hash = EXCLUDED.facts_hash,
+         model = EXCLUDED.model,
+         generation_count = EXCLUDED.generation_count,
+         updated_at = EXCLUDED.updated_at`,
+      [
+        review.id,
+        review.userId,
+        review.date,
+        review.status,
+        review.source,
+        JSON.stringify(review.stats),
+        review.summary,
+        JSON.stringify(review.highlights),
+        JSON.stringify(review.blockers),
+        JSON.stringify(review.tomorrowSuggestions),
+        review.factsHash,
+        review.model ?? null,
         review.generationCount,
         review.createdAt,
         review.updatedAt

@@ -1,6 +1,7 @@
 import type { Task } from '@today-todo/contracts';
 
 import type { BackendDatabase, IdempotencyClaim } from './database.js';
+import type { DailyReviewRecord } from './daily-review-types.js';
 import { INBOX_LIST_ID } from './types.js';
 import type {
   ApiData,
@@ -31,6 +32,7 @@ interface Snapshot {
   readonly reminderGrants: Readonly<Record<string, number>>;
   readonly idempotency: readonly IdempotencyRecord[];
   readonly weeklyReviews: readonly WeeklyReviewRecord[];
+  readonly dailyReviews: readonly DailyReviewRecord[];
 }
 
 const EMPTY_SNAPSHOT: Snapshot = {
@@ -43,7 +45,8 @@ const EMPTY_SNAPSHOT: Snapshot = {
   reminders: [],
   reminderGrants: {},
   idempotency: [],
-  weeklyReviews: []
+  weeklyReviews: [],
+  dailyReviews: []
 };
 
 function upsertById<T extends { readonly id: string }>(
@@ -455,7 +458,8 @@ export class MemoryDatabase implements BackendDatabase {
       reminderGrants: Object.fromEntries(
         Object.entries(this.snapshot.reminderGrants).filter(([id]) => id !== userId)
       ),
-      weeklyReviews: this.snapshot.weeklyReviews.filter((review) => review.userId !== userId)
+      weeklyReviews: this.snapshot.weeklyReviews.filter((review) => review.userId !== userId),
+      dailyReviews: this.snapshot.dailyReviews.filter((review) => review.userId !== userId)
     };
     return Promise.resolve();
   }
@@ -479,6 +483,23 @@ export class MemoryDatabase implements BackendDatabase {
     this.snapshot = {
       ...this.snapshot,
       weeklyReviews: [...without, review]
+    };
+    return Promise.resolve();
+  }
+
+  public findDailyReview(userId: string, date: string): Promise<DailyReviewRecord | undefined> {
+    return Promise.resolve(
+      this.snapshot.dailyReviews.find((review) => review.userId === userId && review.date === date)
+    );
+  }
+
+  public saveDailyReview(review: DailyReviewRecord): Promise<void> {
+    const without = this.snapshot.dailyReviews.filter(
+      (candidate) => !(candidate.userId === review.userId && candidate.date === review.date)
+    );
+    this.snapshot = {
+      ...this.snapshot,
+      dailyReviews: [...without, review]
     };
     return Promise.resolve();
   }

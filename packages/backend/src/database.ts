@@ -10,6 +10,7 @@ import type {
   TodoTag,
   UserRecord
 } from './types.js';
+import type { DailyReviewRecord } from './daily-review-types.js';
 import type { WeeklyReviewRecord } from './weekly-review-types.js';
 
 export type IdempotencyClaim =
@@ -90,4 +91,6 @@ export interface BackendDatabase {
 
   findWeeklyReview(userId: string, weekStart: string): Promise<WeeklyReviewRecord | undefined>;
   saveWeeklyReview(review: WeeklyReviewRecord): Promise<void>;
+  findDailyReview(userId: string, date: string): Promise<DailyReviewRecord | undefined>;
+  saveDailyReview(review: DailyReviewRecord): Promise<void>;
 }

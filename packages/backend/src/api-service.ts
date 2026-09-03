@@ -3,6 +3,8 @@ import { createHash, randomBytes } from 'node:crypto';
 import type { ApiMeta, RecurrenceRule, Task } from '@today-todo/contracts';
 import {
   aiAllowed,
+  buildDailyFacts,
+  buildRulesDailyReview,
   buildRulesReview,
   buildWeeklyFacts,
   cancelReminder,
@@ -32,6 +34,7 @@ import {
   weekEndExclusiveMs,
   weekStartForInstant,
   type AuthChannel,
+  type DailyReviewFacts,
   type TaskSortTuple,
   type WeChatIdentity,
   type WeeklyReviewFacts
@@ -39,7 +42,8 @@ import {
 import { z, ZodError } from 'zod';
 
 import type { BackendDatabase } from './database.js';
-import type { LlmWeeklyContent } from './llm-client.js';
+import type { DailyReviewRecord, DailyReviewView } from './daily-review-types.js';
+import type { LlmDailyContent, LlmWeeklyContent } from './llm-client.js';
 import { INBOX_LIST_ID } from './types.js';
 import type {
   ApiData,
@@ -61,6 +65,7 @@ const IDEMPOTENCY_LIFETIME_MS = 24 * 60 * 60 * 1000;
 const MAX_REMINDER_GRANTS = 20;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_WEEKLY_GENERATIONS = 5;
+const MAX_DAILY_GENERATIONS = 3;
 const RECURRENCE_HORIZON_MS = 60 * 24 * 60 * 60 * 1000;
 
 function isValidDateKey(value: string): boolean {
@@ -271,6 +276,9 @@ export interface ApiServiceOptions {
   readonly generateWeeklyReviewWithLlm?: (
     facts: WeeklyReviewFacts
   ) => Promise<LlmWeeklyContent | null>;
+  readonly generateDailyReviewWithLlm?: (
+    facts: DailyReviewFacts
+  ) => Promise<LlmDailyContent | null>;
 }
 
 export class ApiService {
@@ -283,6 +291,9 @@ export class ApiService {
   private readonly generateWeeklyReviewWithLlm?: (
     facts: WeeklyReviewFacts
   ) => Promise<LlmWeeklyContent | null>;
+  private readonly generateDailyReviewWithLlm?: (
+    facts: DailyReviewFacts
+  ) => Promise<LlmDailyContent | null>;
 
   public constructor(options: ApiServiceOptions) {
     this.database = options.database;
@@ -303,6 +314,9 @@ export class ApiService {
     }
     if (options.generateWeeklyReviewWithLlm !== undefined) {
       this.generateWeeklyReviewWithLlm = options.generateWeeklyReviewWithLlm;
+    }
+    if (options.generateDailyReviewWithLlm !== undefined) {
+      this.generateDailyReviewWithLlm = options.generateDailyReviewWithLlm;
     }
   }
 
@@ -525,6 +539,12 @@ export class ApiService {
     }
     if (request.method === 'POST' && request.path === '/v1/account/deletion') {
       return this.startAccountDeletion(user);
+    }
+    if (request.method === 'GET' && request.path === '/v1/daily-reviews') {
+      return this.getDailyReview(user, request.query);
+    }
+    if (request.method === 'POST' && request.path === '/v1/daily-reviews/generate') {
+      return this.generateDailyReview(user, request.body);
     }
     if (request.method === 'GET' && request.path === '/v1/weekly-reviews/current') {
       return this.getCurrentWeeklyReview(user);
@@ -1071,6 +1091,103 @@ export class ApiService {
     }
     await this.database.deleteTag(user.id, tagId);
     return success(204, null);
+  }
+
+  private async collectDailyFacts(
+    user: UserRecord,
+    date: string,
+    now: number
+  ): Promise<DailyReviewFacts> {
+    const [tasks, lists] = await Promise.all([
+      this.database.tasksForUser(user.id),
+      this.database.listsForUser(user.id)
+    ]);
+    return buildDailyFacts({
+      date,
+      now,
+      tasks,
+      listNames: Object.fromEntries(lists.map((list) => [list.id, list.name]))
+    });
+  }
+
+  private dailyFactsHash(facts: DailyReviewFacts): string {
+    return createHash('sha256')
+      .update(JSON.stringify({ date: facts.date, stats: facts.stats, tasks: facts.tasks }))
+      .digest('hex');
+  }
+
+  private async getDailyReview(
+    user: UserRecord,
+    query: HttpRequest['query']
+  ): Promise<HttpResult<DailyReviewView>> {
+    const date = query?.date;
+    if (date === undefined || !isValidDateKey(date)) {
+      return failure(400, 'INVALID_REVIEW_DATE', 'date 必须是 YYYY-MM-DD');
+    }
+    const now = this.now();
+    const today = shanghaiDateKey(now);
+    if (date > today) {
+      return failure(400, 'DAILY_REVIEW_FUTURE', '不能总结未来日期');
+    }
+    const facts = await this.collectDailyFacts(user, date, now);
+    const factsHash = this.dailyFactsHash(facts);
+    const review = (await this.database.findDailyReview(user.id, date)) ?? null;
+    return success(200, {
+      date,
+      isCompleteDay: date < today,
+      needsRefresh: review !== null && review.factsHash !== factsHash,
+      stats: facts.stats,
+      review
+    });
+  }
+
+  private async generateDailyReview(
+    user: UserRecord,
+    body: unknown
+  ): Promise<HttpResult<DailyReviewRecord>> {
+    const input = z.object({ date: z.string(), force: z.boolean().optional() }).parse(body);
+    if (!isValidDateKey(input.date)) {
+      return failure(400, 'INVALID_REVIEW_DATE', 'date 必须是 YYYY-MM-DD');
+    }
+    const now = this.now();
+    if (input.date > shanghaiDateKey(now)) {
+      return failure(400, 'DAILY_REVIEW_FUTURE', '不能总结未来日期');
+    }
+    const facts = await this.collectDailyFacts(user, input.date, now);
+    if (facts.stats.total === 0) {
+      return failure(400, 'DAILY_REVIEW_EMPTY', '这一天还没有记录的安排');
+    }
+    const factsHash = this.dailyFactsHash(facts);
+    const existing = await this.database.findDailyReview(user.id, input.date);
+    if (existing !== undefined && existing.factsHash === factsHash && input.force !== true) {
+      return success(200, existing);
+    }
+    if (existing !== undefined && existing.generationCount >= MAX_DAILY_GENERATIONS) {
+      return failure(429, 'DAILY_REVIEW_RATE_LIMITED', '这一天的总结生成次数已达上限');
+    }
+
+    const rules = buildRulesDailyReview(facts);
+    const llm = await this.generateDailyReviewWithLlm?.(facts);
+    const content = llm ?? rules;
+    const review: DailyReviewRecord = {
+      id: existing?.id ?? (await this.database.nextId('daily')),
+      userId: user.id,
+      date: input.date,
+      status: 'ready',
+      source: llm === null || llm === undefined ? 'rules' : 'model',
+      stats: facts.stats,
+      summary: content.summary,
+      highlights: content.highlights,
+      blockers: content.blockers,
+      tomorrowSuggestions: content.tomorrowSuggestions,
+      factsHash,
+      ...(llm === null || llm === undefined ? {} : { model: llm.model }),
+      generationCount: (existing?.generationCount ?? 0) + 1,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now
+    };
+    await this.database.saveDailyReview(review);
+    return success(200, review);
   }
 
   private async getCurrentWeeklyReview(user: UserRecord): Promise<HttpResult<WeeklyReviewView>> {

@@ -19,11 +19,14 @@ export {
   type TestSystemOptions
 } from './test-system.js';
 export {
+  createOpenAiCompatibleDailyReviewClient,
   createOpenAiCompatibleLlmClient,
+  type LlmDailyContent,
   type LlmClientOptions,
   type LlmWeeklyContent
 } from './llm-client.js';
 export type { WeeklyReviewRecord, WeeklyReviewView } from './weekly-review-types.js';
+export type { DailyReviewRecord, DailyReviewView } from './daily-review-types.js';
 export type {
   AccountDeletionData,
   ApiData,

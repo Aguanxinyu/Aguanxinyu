@@ -8,6 +8,16 @@ export {
 } from './auth-identity.js';
 export { DomainError, type DomainErrorCode } from './errors.js';
 export {
+  buildDailyFacts,
+  buildRulesDailyReview,
+  type BuildDailyFactsOptions,
+  type DailyReviewContent,
+  type DailyReviewFacts,
+  type DailyReviewItem,
+  type DailyStats,
+  type DailyTaskFact
+} from './daily-review.js';
+export {
   compareSortTuples,
   getTaskGroup,
   shanghaiDateKey,

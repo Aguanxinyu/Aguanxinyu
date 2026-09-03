@@ -6,6 +6,7 @@
       <view class="day-line">
         <text class="day-title">{{dayTitle}}</text>
         <text class="day-count">{{loadingDay ? '同步中' : tasks.length + ' 项安排'}}</text>
+        <button class="daily-review-link" bindtap="onOpenDailyReview">AI 总结</button>
       </view>
       <button
         wx:if="{{inListWorkspace}}"

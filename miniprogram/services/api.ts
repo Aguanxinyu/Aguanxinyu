@@ -81,6 +81,37 @@ export interface WeeklyReviewClientView {
   readonly review: WeeklyReviewClientRecord | null;
 }
 
+export interface DailyReviewClientRecord {
+  readonly summary: string;
+  readonly source: 'model' | 'rules';
+  readonly model?: string;
+  readonly generationCount: number;
+  readonly highlights: readonly DailyReviewClientItem[];
+  readonly blockers: readonly DailyReviewClientItem[];
+  readonly tomorrowSuggestions: readonly DailyReviewClientItem[];
+}
+
+export interface DailyReviewClientItem {
+  readonly title: string;
+  readonly detail: string;
+  readonly taskIds: readonly string[];
+}
+
+export interface DailyReviewClientView {
+  readonly date: string;
+  readonly isCompleteDay: boolean;
+  readonly needsRefresh: boolean;
+  readonly stats: {
+    readonly total: number;
+    readonly completed: number;
+    readonly open: number;
+    readonly overdueOpen: number;
+    readonly highPriorityOpen: number;
+    readonly completionRate: number;
+  };
+  readonly review: DailyReviewClientRecord | null;
+}
+
 export interface CreateTaskInput {
   readonly title: string;
   readonly notes?: string;
@@ -337,6 +368,14 @@ export class ApiClient {
 
   public generateWeeklyReview(weekStart: string): Promise<WeeklyReviewClientRecord> {
     return this.request('POST', '/v1/weekly-reviews/generate', { weekStart }, true);
+  }
+
+  public getDailyReview(date: string): Promise<DailyReviewClientView> {
+    return this.request('GET', `/v1/daily-reviews?date=${encodeURIComponent(date)}`);
+  }
+
+  public generateDailyReview(date: string, force = false): Promise<DailyReviewClientRecord> {
+    return this.request('POST', '/v1/daily-reviews/generate', { date, force }, true);
   }
 
   private request<T>(

@@ -1,6 +1,7 @@
 import type { ApiResponse, RecurrenceRule, Reminder, Task } from '@today-todo/contracts';
 
 import type { WeeklyReviewRecord, WeeklyReviewView } from './weekly-review-types.js';
+import type { DailyReviewRecord, DailyReviewView } from './daily-review-types.js';
 
 export const INBOX_LIST_ID = 'inbox';
 
@@ -123,6 +124,8 @@ export interface SentMessage {
 export type ApiData =
   | AccountDeletionData
   | AuthData
+  | DailyReviewView
+  | DailyReviewRecord
   | ReminderGrant
   | Task
   | TodoList
