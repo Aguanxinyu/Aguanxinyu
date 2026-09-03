@@ -36,8 +36,7 @@ export class Schedulers {
         if (
           series.status !== 'ACTIVE' ||
           series.startDate > throughDate ||
-          (series.materializedThrough !== undefined &&
-            series.materializedThrough >= throughDate)
+          (series.materializedThrough !== undefined && series.materializedThrough >= throughDate)
         ) {
           continue;
         }

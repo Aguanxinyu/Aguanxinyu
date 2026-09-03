@@ -341,9 +341,7 @@ export class ApiService {
           return claim.result;
         }
         if (claim.kind === 'pending') {
-          return asApiData(
-            failure(409, 'REQUEST_IN_PROGRESS', '相同请求正在处理中，请稍后重试')
-          );
+          return asApiData(failure(409, 'REQUEST_IN_PROGRESS', '相同请求正在处理中，请稍后重试'));
         }
       }
 
@@ -649,8 +647,7 @@ export class ApiService {
       updatedAt: now
     };
     const horizonDate = shanghaiDateKey(now + RECURRENCE_HORIZON_MS);
-    const throughDate =
-      recurrence.startDate > horizonDate ? recurrence.startDate : horizonDate;
+    const throughDate = recurrence.startDate > horizonDate ? recurrence.startDate : horizonDate;
     const occurrenceDates = expandOccurrences(series, recurrence.startDate, throughDate);
     const firstDate = occurrenceDates[0];
     if (firstDate === undefined) {

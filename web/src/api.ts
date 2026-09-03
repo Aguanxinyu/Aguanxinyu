@@ -201,8 +201,7 @@ export async function listTasks(dueOn?: string): Promise<readonly Task[]> {
     });
     tasks.push(...page.data);
     const nextCursor = page.meta?.cursor;
-    cursor =
-      page.meta?.hasMore === true && typeof nextCursor === 'string' ? nextCursor : undefined;
+    cursor = page.meta?.hasMore === true && typeof nextCursor === 'string' ? nextCursor : undefined;
   } while (cursor !== undefined);
   return tasks;
 }

@@ -66,9 +66,7 @@ describe('security and idempotency regressions', () => {
     expect(tasks).toHaveLength(1);
     expect(results.map(({ status }) => status).sort()).toEqual([201, 409]);
     expect(
-      results.some(
-        ({ body }) => !body.success && body.error.code === 'REQUEST_IN_PROGRESS'
-      )
+      results.some(({ body }) => !body.success && body.error.code === 'REQUEST_IN_PROGRESS')
     ).toBe(true);
   });
 

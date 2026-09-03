@@ -395,8 +395,7 @@ function openTaskEditor(task?: Task): void {
           priority,
           dueAt,
           dueHasTime: false,
-          location:
-            locationName.length > 0 ? { source: 'MANUAL', name: locationName } : null
+          location: locationName.length > 0 ? { source: 'MANUAL', name: locationName } : null
         });
       }
       root.innerHTML = '';
