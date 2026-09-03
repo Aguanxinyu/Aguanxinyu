@@ -315,26 +315,43 @@ export class ApiService {
           return asApiData(failure(400, 'REQUEST_ID_REQUIRED', '写操作必须提供请求标识'));
         }
         idempotencyScope = `${method}:${request.path}:${request.requestId}`;
-        const existing = await this.database.findIdempotentResult(
+        const claim = await this.database.claimIdempotency(
           user.id,
           idempotencyScope,
-          this.now()
+          this.now(),
+          this.now() + IDEMPOTENCY_LIFETIME_MS
         );
-        if (existing !== undefined) {
-          return existing;
+        if (claim.kind === 'result') {
+          return claim.result;
+        }
+        if (claim.kind === 'pending') {
+          return asApiData(
+            failure(409, 'REQUEST_IN_PROGRESS', '相同请求正在处理中，请稍后重试')
+          );
         }
       }
 
-      const result = await this.routeAuthenticated(user, effectiveRequest);
-      if (idempotencyScope !== undefined && result.status >= 200 && result.status < 400) {
-        await this.database.saveIdempotentResult(
-          user.id,
-          idempotencyScope,
-          result,
-          this.now() + IDEMPOTENCY_LIFETIME_MS
-        );
+      try {
+        const result = await this.routeAuthenticated(user, effectiveRequest);
+        if (idempotencyScope !== undefined) {
+          if (result.status >= 200 && result.status < 400) {
+            await this.database.saveIdempotentResult(
+              user.id,
+              idempotencyScope,
+              result,
+              this.now() + IDEMPOTENCY_LIFETIME_MS
+            );
+          } else {
+            await this.database.releaseIdempotencyClaim(user.id, idempotencyScope);
+          }
+        }
+        return result;
+      } catch (error) {
+        if (idempotencyScope !== undefined) {
+          await this.database.releaseIdempotencyClaim(user.id, idempotencyScope);
+        }
+        throw error;
       }
-      return result;
     } catch (error) {
       return this.errorResult(error);
     }
@@ -690,7 +707,9 @@ export class ApiService {
     }
     const updated =
       action === 'complete' ? completeTask(task, this.now()) : uncompleteTask(task, this.now());
-    await this.database.saveTask(updated);
+    if (updated !== task && !(await this.database.saveTask(updated, task.version))) {
+      return failure(409, 'VERSION_CONFLICT', '任务已被其他操作修改，请刷新后重试');
+    }
     return success(200, updated);
   }
 
@@ -752,19 +771,22 @@ export class ApiService {
     );
     let savedTask: Task;
     if (sync.kind === 'active') {
-      await this.database.saveReminder(sync.reminder);
       savedTask = { ...updated, remindAt: sync.reminder.fireAt };
     } else if (sync.kind === 'disabled') {
-      if (sync.reminder !== null) {
-        await this.database.saveReminder(sync.reminder);
-      }
       const withoutReminder = { ...updated };
       delete withoutReminder.remindAt;
       savedTask = withoutReminder;
     } else {
       savedTask = updated;
     }
-    await this.database.saveTask(savedTask);
+    if (!(await this.database.saveTask(savedTask, existing.version))) {
+      return failure(409, 'VERSION_CONFLICT', '任务已被其他操作修改，请刷新后重试');
+    }
+    if (sync.kind === 'active') {
+      await this.database.saveReminder(sync.reminder);
+    } else if (sync.kind === 'disabled' && sync.reminder !== null) {
+      await this.database.saveReminder(sync.reminder);
+    }
     return success(200, savedTask);
   }
 
@@ -873,7 +895,9 @@ export class ApiService {
       return failure(404, 'TASK_NOT_FOUND', '待办不存在或已删除');
     }
     const updated = trashTask(task, this.now());
-    await this.database.saveTask(updated);
+    if (!(await this.database.saveTask(updated, task.version))) {
+      return failure(409, 'VERSION_CONFLICT', '任务已被其他操作修改，请刷新后重试');
+    }
     for (const reminder of await this.database.findRemindersForTask(user.id, taskId)) {
       if (reminder.state === 'SCHEDULED') {
         await this.database.saveReminder({ ...cancelReminder(reminder), title: reminder.title });
@@ -896,7 +920,9 @@ export class ApiService {
       ...restoreTask(task, now),
       listId
     };
-    await this.database.saveTask(restored);
+    if (!(await this.database.saveTask(restored, task.version))) {
+      return failure(409, 'VERSION_CONFLICT', '任务已被其他操作修改，请刷新后重试');
+    }
     const reminders = await this.database.findRemindersForTask(user.id, taskId);
     const reminder = reminders.find((candidate) => candidate.state === 'SKIPPED');
     if (reminder !== undefined) {

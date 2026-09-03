@@ -107,6 +107,49 @@ describe('background schedulers', () => {
     });
   });
 
+  it('atomically claims a reminder across concurrent dispatches', async () => {
+    const now = Date.UTC(2026, 6, 31, 4);
+    const system = createTestSystem({ now });
+    const user = await system.login('concurrent-reminder-user');
+    await system.request({
+      method: 'POST',
+      path: '/v1/reminder-grants',
+      token: user.token,
+      requestId: 'grant-concurrent',
+      body: { accepted: true }
+    });
+    await system.request({
+      method: 'POST',
+      path: '/v1/tasks',
+      token: user.token,
+      requestId: 'task-concurrent',
+      body: {
+        title: '并发提醒',
+        priority: 'HIGH',
+        dueAt: now + 10 * 60 * 1000,
+        dueHasTime: true,
+        reminderEnabled: true,
+        tagIds: []
+      }
+    });
+
+    let sendCount = 0;
+    const scheduler = new Schedulers({
+      database: system.database,
+      api: system.api,
+      now: () => now,
+      sendMessage: () => {
+        sendCount += 1;
+        return Promise.resolve();
+      },
+      reportError: () => undefined
+    });
+
+    await Promise.all([scheduler.dispatchReminders(now), scheduler.dispatchReminders(now)]);
+
+    expect(sendCount).toBe(1);
+  });
+
   it('cancels a scheduled reminder on trash and reactivates it on restore', async () => {
     const now = Date.UTC(2026, 6, 31, 4);
     const system = createTestSystem({ now });

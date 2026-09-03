@@ -176,6 +176,41 @@ describe('authenticated todo API flow', () => {
     expect(current.body.success && current.body.data.title).toBe('第一次修改');
   });
 
+  it('allows only one concurrent PATCH for the same task version', async () => {
+    const system = createTestSystem({ now: Date.UTC(2026, 6, 31, 4) });
+    const user = await system.login('concurrent-version-user');
+    const created = await system.request({
+      method: 'POST',
+      path: '/v1/tasks',
+      token: user.token,
+      requestId: 'create-concurrent',
+      body: {
+        title: '并发目标',
+        priority: 'MEDIUM',
+        dueHasTime: false,
+        tagIds: []
+      }
+    });
+    const taskId = created.body.success ? created.body.data.id : '';
+    const version = created.body.success ? created.body.data.version : 0;
+    const update = (title: string, requestId: string) =>
+      system.request({
+        method: 'PATCH' as const,
+        path: `/v1/tasks/${taskId}`,
+        token: user.token,
+        requestId,
+        body: { version, title }
+      });
+
+    const responses = await Promise.all([
+      update('并发修改 A', 'concurrent-a'),
+      update('并发修改 B', 'concurrent-b')
+    ]);
+
+    expect(responses.map(({ status }) => status).sort()).toEqual([200, 409]);
+    expect((await system.database.findTask(user.userId, taskId))?.version).toBe(version + 1);
+  });
+
   it('accepts a POST with an X-HTTP-Method-Override header as an update', async () => {
     const system = createTestSystem({ now: Date.UTC(2026, 6, 31, 4) });
     const user = await system.login('override-user');

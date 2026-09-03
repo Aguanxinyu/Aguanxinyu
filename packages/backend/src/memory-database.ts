@@ -1,6 +1,6 @@
 import type { Task } from '@today-todo/contracts';
 
-import type { BackendDatabase } from './database.js';
+import type { BackendDatabase, IdempotencyClaim } from './database.js';
 import { INBOX_LIST_ID } from './types.js';
 import type {
   ApiData,
@@ -16,7 +16,7 @@ import type { WeeklyReviewRecord } from './weekly-review-types.js';
 
 interface IdempotencyRecord {
   readonly key: string;
-  readonly result: HttpResult<ApiData>;
+  readonly result?: HttpResult<ApiData>;
   readonly expiresAt: number;
 }
 
@@ -182,12 +182,20 @@ export class MemoryDatabase implements BackendDatabase {
     );
   }
 
-  public saveTask(task: Task): Promise<void> {
+  public saveTask(task: Task, expectedVersion?: number): Promise<boolean> {
+    if (expectedVersion !== undefined) {
+      const existing = this.snapshot.tasks.find(
+        (candidate) => candidate.userId === task.userId && candidate.id === task.id
+      );
+      if (existing?.version !== expectedVersion) {
+        return Promise.resolve(false);
+      }
+    }
     this.snapshot = {
       ...this.snapshot,
       tasks: upsertByUserAndId(this.snapshot.tasks, task)
     };
-    return Promise.resolve();
+    return Promise.resolve(true);
   }
 
   public deleteTask(userId: string, taskId: string): Promise<void> {
@@ -284,12 +292,18 @@ export class MemoryDatabase implements BackendDatabase {
     return Promise.resolve();
   }
 
-  public remindersDueAtOrBefore(now: number): Promise<readonly ReminderRecord[]> {
-    return Promise.resolve(
-      this.snapshot.reminders.filter(
-        (reminder) => reminder.state === 'SCHEDULED' && reminder.fireAt <= now
-      )
+  public claimRemindersDueAtOrBefore(now: number): Promise<readonly ReminderRecord[]> {
+    const due = this.snapshot.reminders.filter(
+      (reminder) => reminder.state === 'SCHEDULED' && reminder.fireAt <= now
     );
+    const dueIds = new Set(due.map(({ id }) => id));
+    this.snapshot = {
+      ...this.snapshot,
+      reminders: this.snapshot.reminders.map((reminder) =>
+        dueIds.has(reminder.id) ? { ...reminder, state: 'SENDING' as const } : reminder
+      )
+    };
+    return Promise.resolve(due.map((reminder) => ({ ...reminder, state: 'SENDING' as const })));
   }
 
   public findRemindersForTask(userId: string, taskId: string): Promise<readonly ReminderRecord[]> {
@@ -340,16 +354,32 @@ export class MemoryDatabase implements BackendDatabase {
     return true;
   }
 
-  public findIdempotentResult(
+  public claimIdempotency(
     userId: string,
     scope: string,
-    now: number
-  ): Promise<HttpResult<ApiData> | undefined> {
-    return Promise.resolve(
-      this.snapshot.idempotency.find(
-        ({ key, expiresAt }) => key === `${userId}:${scope}` && expiresAt > now
-      )?.result
+    now: number,
+    expiresAt: number
+  ): Promise<IdempotencyClaim> {
+    const key = `${userId}:${scope}`;
+    const existing = this.snapshot.idempotency.find(
+      (record) => record.key === key && record.expiresAt > now
     );
+    if (existing?.result !== undefined) {
+      return Promise.resolve({ kind: 'result', result: existing.result });
+    }
+    if (existing !== undefined) {
+      return Promise.resolve({ kind: 'pending' });
+    }
+    this.snapshot = {
+      ...this.snapshot,
+      idempotency: [
+        ...this.snapshot.idempotency.filter(
+          (record) => record.key !== key || record.expiresAt > now
+        ),
+        { key, expiresAt }
+      ]
+    };
+    return Promise.resolve({ kind: 'claimed' });
   }
 
   public saveIdempotentResult(
@@ -369,6 +399,17 @@ export class MemoryDatabase implements BackendDatabase {
           expiresAt
         }
       ]
+    };
+    return Promise.resolve();
+  }
+
+  public releaseIdempotencyClaim(userId: string, scope: string): Promise<void> {
+    const key = `${userId}:${scope}`;
+    this.snapshot = {
+      ...this.snapshot,
+      idempotency: this.snapshot.idempotency.filter(
+        (record) => record.key !== key || record.result !== undefined
+      )
     };
     return Promise.resolve();
   }

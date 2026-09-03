@@ -64,7 +64,7 @@ export class Schedulers {
   }
 
   public async dispatchReminders(at: number): Promise<void> {
-    for (const reminder of await this.database.remindersDueAtOrBefore(at)) {
+    for (const reminder of await this.database.claimRemindersDueAtOrBefore(at)) {
       const task = await this.database.findTask(reminder.userId, reminder.taskId);
       if (
         task === undefined ||
@@ -79,10 +79,6 @@ export class Schedulers {
         continue;
       }
 
-      await this.database.saveReminder({
-        ...reminder,
-        state: 'SENDING'
-      });
       try {
         await this.sendMessage({
           userId: reminder.userId,

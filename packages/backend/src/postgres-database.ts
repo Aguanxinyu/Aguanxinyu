@@ -1,7 +1,7 @@
 import type { ActiveTaskStatus, RecurrenceRule, Task } from '@today-todo/contracts';
 import pg from 'pg';
 
-import type { BackendDatabase } from './database.js';
+import type { BackendDatabase, IdempotencyClaim } from './database.js';
 import {
   INBOX_LIST_ID,
   type ApiData,
@@ -106,7 +106,7 @@ interface ReminderRow {
 }
 
 interface IdempotencyRow {
-  result: HttpResult<ApiData>;
+  result: HttpResult<ApiData> | null;
   expires_at: number;
 }
 
@@ -398,8 +398,8 @@ export class PostgresDatabase implements BackendDatabase {
     return result.rows[0] === undefined ? undefined : toTaskRecord(result.rows[0]);
   }
 
-  public async saveTask(task: Task): Promise<void> {
-    await this.pool.query(
+  public async saveTask(task: Task, expectedVersion?: number): Promise<boolean> {
+    const result = await this.pool.query(
       `INSERT INTO tasks (
          user_id, id, title, notes, start_at, start_has_time, due_at, due_has_time, priority, status, original_status,
          list_id, tag_ids, location, series_id, occurrence_date, remind_at,
@@ -425,7 +425,8 @@ export class PostgresDatabase implements BackendDatabase {
          updated_at = EXCLUDED.updated_at,
          completed_at = EXCLUDED.completed_at,
          trashed_at = EXCLUDED.trashed_at,
-         purge_after_at = EXCLUDED.purge_after_at`,
+         purge_after_at = EXCLUDED.purge_after_at
+       WHERE $24::integer IS NULL OR tasks.version = $24`,
       [
         task.userId,
         task.id,
@@ -449,9 +450,11 @@ export class PostgresDatabase implements BackendDatabase {
         task.updatedAt,
         task.completedAt ?? null,
         task.trashedAt ?? null,
-        task.purgeAfterAt ?? null
+        task.purgeAfterAt ?? null,
+        expectedVersion ?? null
       ]
     );
+    return (result.rowCount ?? 0) > 0;
   }
 
   public async deleteTask(userId: string, taskId: string): Promise<void> {
@@ -582,12 +585,25 @@ export class PostgresDatabase implements BackendDatabase {
     );
   }
 
-  public async remindersDueAtOrBefore(now: number): Promise<readonly ReminderRecord[]> {
+  public async claimRemindersDueAtOrBefore(now: number): Promise<readonly ReminderRecord[]> {
     const result = await this.pool.query<ReminderRow>(
-      "SELECT * FROM reminders WHERE state = 'SCHEDULED' AND fire_at <= $1 ORDER BY fire_at, id",
+      `WITH candidates AS (
+         SELECT id
+         FROM reminders
+         WHERE state = 'SCHEDULED' AND fire_at <= $1
+         ORDER BY fire_at, id
+         FOR UPDATE SKIP LOCKED
+       )
+       UPDATE reminders AS reminder
+       SET state = 'SENDING'
+       FROM candidates
+       WHERE reminder.id = candidates.id
+       RETURNING reminder.*`,
       [now]
     );
-    return result.rows.map(toReminderRecord);
+    return result.rows.map(toReminderRecord).sort((left, right) => {
+      return left.fireAt - right.fireAt || left.id.localeCompare(right.id);
+    });
   }
 
   public async findRemindersForTask(
@@ -650,16 +666,35 @@ export class PostgresDatabase implements BackendDatabase {
     return (result.rowCount ?? 0) > 0;
   }
 
-  public async findIdempotentResult(
+  public async claimIdempotency(
     userId: string,
     scope: string,
-    now: number
-  ): Promise<HttpResult<ApiData> | undefined> {
-    const result = await this.pool.query<IdempotencyRow>(
-      'SELECT result FROM idempotency WHERE user_id = $1 AND scope = $2 AND expires_at > $3 LIMIT 1',
+    now: number,
+    expiresAt: number
+  ): Promise<IdempotencyClaim> {
+    await this.pool.query(
+      'DELETE FROM idempotency WHERE user_id = $1 AND scope = $2 AND expires_at <= $3',
       [userId, scope, now]
     );
-    return result.rows[0]?.result;
+    const claimed = await this.pool.query(
+      `INSERT INTO idempotency (user_id, scope, result, expires_at)
+       VALUES ($1, $2, NULL, $3)
+       ON CONFLICT (user_id, scope) DO NOTHING
+       RETURNING scope`,
+      [userId, scope, expiresAt]
+    );
+    if ((claimed.rowCount ?? 0) > 0) {
+      return { kind: 'claimed' };
+    }
+    const existing = await this.pool.query<IdempotencyRow>(
+      'SELECT result, expires_at FROM idempotency WHERE user_id = $1 AND scope = $2 LIMIT 1',
+      [userId, scope]
+    );
+    const row = existing.rows[0];
+    if (row?.result !== null && row?.result !== undefined) {
+      return { kind: 'result', result: row.result };
+    }
+    return { kind: 'pending' };
   }
 
   public async saveIdempotentResult(
@@ -669,9 +704,17 @@ export class PostgresDatabase implements BackendDatabase {
     expiresAt: number
   ): Promise<void> {
     await this.pool.query(
-      `INSERT INTO idempotency (user_id, scope, result, expires_at) VALUES ($1, $2, $3, $4)
-       ON CONFLICT (user_id, scope) DO UPDATE SET result = EXCLUDED.result, expires_at = EXCLUDED.expires_at`,
+      `UPDATE idempotency
+       SET result = $3, expires_at = $4
+       WHERE user_id = $1 AND scope = $2`,
       [userId, scope, result, expiresAt]
+    );
+  }
+
+  public async releaseIdempotencyClaim(userId: string, scope: string): Promise<void> {
+    await this.pool.query(
+      'DELETE FROM idempotency WHERE user_id = $1 AND scope = $2 AND result IS NULL',
+      [userId, scope]
     );
   }
 
