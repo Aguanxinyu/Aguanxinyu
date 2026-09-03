@@ -379,8 +379,10 @@ export class MemoryDatabase implements BackendDatabase {
       users: this.snapshot.users.map((user) =>
         user.id === userId
           ? {
-              ...user,
-              status: 'DELETED'
+              id: user.id,
+              status: 'DELETED',
+              createdAt: user.createdAt,
+              updatedAt: user.updatedAt
             }
           : user
       ),

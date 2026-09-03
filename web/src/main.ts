@@ -5,6 +5,7 @@ import {
   ApiClientError,
   clearSession,
   completeTask,
+  consumeWechatOAuthState,
   createList,
   createTask,
   deleteList,
@@ -155,6 +156,10 @@ async function renderLogin(): Promise<void> {
   if (code !== null && code.length > 0) {
     app.innerHTML = `<div class="hero-login"><div class="loading">正在登录…</div></div>`;
     try {
+      const state = params.get('state') ?? hashQuery?.get('state') ?? null;
+      if (!consumeWechatOAuthState(state)) {
+        throw new ApiClientError(400, 'OAUTH_STATE_INVALID', '登录请求已失效，请重新扫码');
+      }
       const auth = await loginWithCode(code, 'web');
       saveSession(auth);
       window.history.replaceState({}, '', `${window.location.pathname}#/`);
@@ -614,7 +619,8 @@ async function renderWeekly(): Promise<void> {
                 <div class="list-row">
                   <div>
                     <strong>${escapeHtml(item.title)}</strong>
-                    <div class="task-meta">${escapeHtml(item.detail)}</div>
+                    <div class="task-meta">${escapeHtml(item.rationale)}</div>
+                    <div class="task-meta">建议：${escapeHtml(item.suggestion)}</div>
                   </div>
                 </div>`
                 )

@@ -87,7 +87,11 @@ function main(): void {
     database
   });
 
-  const fakeLogin = env('DEV_FAKE_LOGIN') === '1';
+  const fakeLoginRequested = env('DEV_FAKE_LOGIN') === '1';
+  if (fakeLoginRequested && env('NODE_ENV') === 'production') {
+    throw new Error('DEV_FAKE_LOGIN cannot be enabled when NODE_ENV=production');
+  }
+  const fakeLogin = fakeLoginRequested;
   const resolveWeChatIdentity = fakeLogin
     ? createFakeWeChatIdentityResolver()
     : (input: { readonly channel: 'miniprogram' | 'web'; readonly code: string }) =>

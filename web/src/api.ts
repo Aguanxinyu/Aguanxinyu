@@ -1,5 +1,6 @@
 const TOKEN_KEY = 'today-todo:session-token';
 const USER_KEY = 'today-todo:user-id';
+const WECHAT_OAUTH_STATE_KEY = 'today-todo:wechat-oauth-state';
 
 export interface ApiErrorBody {
   readonly success: false;
@@ -63,9 +64,14 @@ export interface WeeklyReviewView {
     readonly improvements: readonly {
       readonly type: string;
       readonly title: string;
-      readonly detail: string;
+      readonly rationale: string;
+      readonly suggestion: string;
       readonly severity: string;
-      readonly taskIds?: readonly string[];
+      readonly taskIds: readonly string[];
+    }[];
+    readonly highlights: readonly {
+      readonly title: string;
+      readonly taskIds: readonly string[];
     }[];
   };
 }
@@ -275,12 +281,20 @@ export function wechatQrConnectUrl(): string | null {
   const redirectUri = encodeURIComponent(
     redirect !== undefined && redirect.length > 0 ? redirect : `${window.location.origin}/#/login`
   );
-  const state = encodeURIComponent(`web-${String(Date.now())}`);
+  const bytes = crypto.getRandomValues(new Uint8Array(24));
+  const state = Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('');
+  sessionStorage.setItem(WECHAT_OAUTH_STATE_KEY, state);
   return `https://open.weixin.qq.com/connect/qrconnect?appid=${encodeURIComponent(appId)}&redirect_uri=${redirectUri}&response_type=code&scope=snsapi_login&state=${state}#wechat_redirect`;
 }
 
+export function consumeWechatOAuthState(received: string | null): boolean {
+  const expected = sessionStorage.getItem(WECHAT_OAUTH_STATE_KEY);
+  sessionStorage.removeItem(WECHAT_OAUTH_STATE_KEY);
+  return expected !== null && received !== null && received === expected;
+}
+
 export function allowDevLogin(): boolean {
-  return import.meta.env.VITE_ALLOW_DEV_LOGIN === '1';
+  return !import.meta.env.PROD && import.meta.env.VITE_ALLOW_DEV_LOGIN === '1';
 }
 
 /** Asia/Shanghai YYYY-MM-DD */

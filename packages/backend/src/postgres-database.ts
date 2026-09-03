@@ -308,7 +308,16 @@ export class PostgresDatabase implements BackendDatabase {
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
-      await client.query("UPDATE users SET status = 'DELETED' WHERE id = $1", [userId]);
+      await client.query(
+        `UPDATE users
+         SET status = 'DELETED',
+             open_id = NULL,
+             mp_open_id = NULL,
+             web_open_id = NULL,
+             union_id = NULL
+         WHERE id = $1`,
+        [userId]
+      );
       await client.query('DELETE FROM sessions WHERE user_id = $1', [userId]);
       await client.query('DELETE FROM tasks WHERE user_id = $1', [userId]);
       await client.query('DELETE FROM lists WHERE user_id = $1', [userId]);

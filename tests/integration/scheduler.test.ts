@@ -295,6 +295,7 @@ describe('background schedulers', () => {
       path: '/v1/auth/login',
       body: { code: 'account-purge-user' }
     });
-    expect(relogin.status).toBe(403);
+    expect(relogin.status).toBe(200);
+    expect(relogin.body.success && relogin.body.data.userId).not.toBe(accountUser.userId);
   });
 });
