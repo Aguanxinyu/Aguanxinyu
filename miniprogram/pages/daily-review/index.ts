@@ -109,7 +109,8 @@ Page({
 
   onOpenTask(event: WechatMiniprogram.BaseEvent): void {
     const raw: unknown = event.currentTarget.dataset['ids'];
-    const taskId = Array.isArray(raw) ? String(raw[0] ?? '') : String(raw ?? '');
+    const first = Array.isArray(raw) ? raw[0] : raw;
+    const taskId = typeof first === 'string' || typeof first === 'number' ? String(first) : '';
     if (taskId.length > 0) {
       void wx.navigateTo({
         url: `/pages/task-edit/index?id=${encodeURIComponent(taskId)}`

@@ -659,8 +659,12 @@ async function renderDaily(): Promise<void> {
     });
     document.querySelector('#generate-daily')?.addEventListener('click', () => {
       void generateDailyReview(selectedDate, review !== null)
-        .then(() => renderDaily())
-        .catch((error: unknown) => showError(app, error));
+        .then(() => {
+          return renderDaily();
+        })
+        .catch((error: unknown) => {
+          showError(app, error);
+        });
     });
   } catch (error) {
     showError(app, error);

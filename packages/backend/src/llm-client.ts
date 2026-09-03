@@ -235,7 +235,9 @@ export function createOpenAiCompatibleDailyReviewClient(
       return null;
     }
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const timer = setTimeout(() => {
+      controller.abort();
+    }, timeoutMs);
     try {
       const response = await fetchImpl(endpoint, {
         method: 'POST',
