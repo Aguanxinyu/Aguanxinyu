@@ -180,9 +180,14 @@ describe('background schedulers', () => {
     });
 
     let sendCount = 0;
+    const api = new ApiService({
+      database: system.database,
+      now: () => now,
+      exchangeLoginCode: (code) => Promise.resolve(code)
+    });
     const scheduler = new Schedulers({
       database: system.database,
-      api: system.api,
+      api,
       now: () => now,
       sendMessage: () => {
         sendCount += 1;
